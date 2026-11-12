@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+/* screen height breakpoints: the sign-in pages show their extras only where they fit without scrolling */
+@custom-variant fits (@media (min-height: 600px));
+@custom-variant roomy (@media (min-height: 700px));
+@custom-variant tall (@media (min-height: 820px));
+
+@theme inline {
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-serif), ui-serif, Georgia, serif;
+}
+
+/* Leaf → Moss → Grass → Forest (100 Leaf #ecf39e, 400 Moss #90a955, 600 Grass #4f772d, 800 Forest #31572c), blended
+   in between. 200–300 are the soft accents, 800 the main action and headings (900 and 950 are Forest too). */
+@theme {
+  --color-brand-50: #f3f6ca;
+  --color-brand-100: #ecf39e;
+  --color-brand-200: #cdda86;
+  --color-brand-300: #afc26d;
+  --color-brand-400: #90a955;
+  --color-brand-500: #6f9041;
+  --color-brand-600: #4f772d;
+  --color-brand-700: #40672c;
+  --color-brand-800: #31572c;
+  --color-brand-900: #31572c;
+  --color-brand-950: #31572c;
+  --color-cream: #faf9f6;
+  --color-paper: #faf9f6;
+
+  /* The whole site uses only White, Leaf, Moss, Grass and Forest. Tailwind's "stone" greys (text, borders,
+     quiet backgrounds) and "white" are remapped onto them, so every grey class follows the palette. */
+  --color-white: #faf9f6;
+  --color-stone-50: #faf9f6;
+  --color-stone-100: #f2f4dc;
+  --color-stone-200: #dae1c6;
+  --color-stone-300: #cad5ae;
+  --color-stone-400: #90a955;
+  --color-stone-500: #4f772d;
+  --color-stone-600: #40672c;
+  --color-stone-700: #31572c;
+  --color-stone-800: #31572c;
+  --color-stone-900: #31572c;
+}
+
+/* the few building blocks every screen uses, so pages stay short and look the same */
+@utility card { @apply rounded-2xl border border-stone-200 bg-paper p-4 sm:p-5; }
+@utility btn-primary {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full bg-brand-800 px-5 text-sm font-semibold text-white
+    transition-colors hover:bg-brand-700 disabled:opacity-40;
+}
+@utility btn-secondary {
+  @apply inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-brand-400 px-5 text-sm font-semibold
+    text-brand-800 transition-colors hover:bg-brand-50 disabled:opacity-40;
+}
+@utility option {
+  @apply block min-h-12 w-full rounded-lg border border-stone-200 bg-white px-3 py-2.5 text-left transition-colors
+    hover:border-brand-400 aria-pressed:border-brand-600 aria-pressed:bg-brand-50 aria-pressed:ring-1 aria-pressed:ring-brand-600;
+}
+@utility input {
+  @apply mt-1.5 w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-stone-900 outline-none transition
+    placeholder:text-stone-400 focus:border-brand-600 focus:ring-2 focus:ring-brand-600/20;
+}
+@utility label { @apply block text-sm font-medium text-stone-700; }
+/* sign-in style field: the label sits inside the box, above the value */
+@utility field {
+  @apply relative block min-w-0 rounded-lg border border-stone-300 bg-white px-3 pt-1.5 pb-1 transition
+    focus-within:border-brand-600 focus-within:ring-2 focus-within:ring-brand-600/20;
+}
+@utility field-label { @apply block text-xs font-medium text-stone-500; }
+/* 16px text: iPhone Safari zooms into any smaller input when it is tapped */
+@utility field-input {
+  @apply block h-7 w-full min-w-0 appearance-none bg-transparent text-base leading-7 text-stone-900 outline-none
+    placeholder:text-stone-400 disabled:text-stone-400 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none;
+}
+/* serif headings: page titles, section titles and card titles */
+@utility heading { @apply font-display text-lg font-bold tracking-tight text-brand-950; }
+@utility section-title { @apply mb-3 font-display text-lg font-bold tracking-tight text-brand-950; }
+@utility muted { @apply text-sm text-stone-500; }
+
+/* Basellion the monster (components/Monster.tsx) */
+.monster-body { transform-box: view-box; transform-origin: 100px 184px; }
+.monster-happy .monster-body { animation: hop 1.6s ease-in-out infinite; }
+.monster-eating .monster-body { animation: hop 0.5s ease-in-out infinite; }
+.monster-hungry .monster-body { animation: wobble 2.4s ease-in-out infinite; }
+.monster-sad .monster-body { animation: droop 4s ease-in-out infinite; }
+.monster-thinking .monster-body { animation: tilt 1.2s ease-in-out infinite alternate; }
+.monster-spitting .monster-body { animation: recoil 0.6s ease-out; }
+.monster-chomp { transform-box: fill-box; transform-origin: center; animation: chomp 0.35s ease-in-out infinite; }
+.monster-sprout { transform-box: fill-box; transform-origin: bottom; animation: sway 3s ease-in-out infinite; }
+.monster-tear { animation: tear 2.5s ease-in infinite; }
+/* the photo flies up into Basellion's mouth, or gets spat out to the side */
+.item-in { animation: item-in 1.1s ease-in forwards; }
+.item-out { animation: item-out 1s ease-out forwards; }
+.coin-pop { animation: coin-pop 0.6s ease-out; }
+
+@keyframes hop { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-10px) scale(0.97, 1.03); } }
+@keyframes wobble { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-3deg); } 75% { transform: rotate(3deg); } }
+@keyframes droop { 0%, 100% { transform: scale(1, 1); } 50% { transform: scale(1.03, 0.95); } }
+@keyframes tilt { from { transform: rotate(-4deg); } to { transform: rotate(4deg); } }
+@keyframes recoil { 30% { transform: scale(1.08, 0.9); } }
+@keyframes chomp { 50% { transform: scaleY(0.25); } }
+@keyframes sway { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes tear { 0% { transform: translateY(0); opacity: 0; } 20% { opacity: 1; } 100% { transform: translateY(26px); opacity: 0; } }
+@keyframes item-in {
+  from { transform: translate(-50%, 140px) scale(1.4) rotate(-20deg); opacity: 1; }
+  to { transform: translate(-50%, -50%) scale(0.1) rotate(10deg); opacity: 0; }
+}
+@keyframes item-out {
+  from { transform: translate(-50%, -50%) scale(0.2); opacity: 1; }
+  to { transform: translate(120px, 20px) scale(1.1) rotate(380deg); opacity: 0; }
+}
+@keyframes coin-pop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.1); opacity: 1; } 100% { transform: scale(1); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .monster *, .item-in, .item-out, .coin-pop { animation: none !important; }
+}
