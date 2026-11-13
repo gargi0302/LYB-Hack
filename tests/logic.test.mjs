@@ -225,3 +225,28 @@ test("only the collector's free slots are offered", () => {
   assert.equal(hoursLabel(9), "9 AM–11 AM");
   assert.equal(hoursLabel(16, "mr"), "संध्याकाळी 4–6");
 });
+
+test("own impact: only weighed batches count, under the type the recycler found", async () => {
+  const { ownImpact, ownQuality, ownCorrections, weekOf } = await import("../lib/impact.ts");
+  const factors = [{ plastic: "PET", kg_co2e_per_kg: 1.5 }, { plastic: "PP", kg_co2e_per_kg: 1 }];
+  const at = (iso) => [{ to_status: "recycled", created_at: iso }];
+  const batches = [
+    { area: "Sagar Nagar", final_type: "PET", actual_type: "PET", actual_kg: 2, ai_type: "PET", status: "recycled", status_events: at("2026-11-10T10:00:00") },
+    { area: "Sagar Nagar", final_type: "PET", actual_type: "PP", actual_kg: 1, ai_type: "PET", status: "recycled", status_events: at("2026-11-11T10:00:00") },
+    { area: "Palm Vihar", final_type: "PP", actual_type: "PP", actual_kg: 4, ai_type: null, status: "recycled", status_events: at("2026-11-03T10:00:00") },
+    { area: "Sagar Nagar", final_type: "PP", actual_type: null, actual_kg: null, ai_type: "LDPE", status: "picked_up" }, // not weighed yet
+  ];
+  const rows = ownImpact(batches, factors);
+  assert.deepEqual(rows.map((r) => [r.week, r.area, r.plastic, r.kg, r.co2e_kg]), [
+    ["2026-11-02", "Palm Vihar", "PP", 4, 4],
+    ["2026-11-09", "Sagar Nagar", "PET", 2, 3],
+    ["2026-11-09", "Sagar Nagar", "PP", 1, 1], // declared PET, recycler found PP
+  ]);
+  assert.deepEqual(ownQuality(batches), [
+    { area: "Sagar Nagar", checked: 2, match_pct: 50 },
+    { area: "Palm Vihar", checked: 1, match_pct: 100 },
+  ]);
+  assert.equal(ownCorrections(batches), 2); // PET found as PP; LDPE listed as PP. No AI guess = not a correction
+  assert.equal(weekOf("2026-11-15T23:00:00"), "2026-11-09"); // Sunday belongs to the week from Monday
+  assert.deepEqual(ownImpact([], factors), []);
+});

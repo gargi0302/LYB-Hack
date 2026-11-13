@@ -6,13 +6,13 @@ import { AreaChart, TYPE_COLOR, WeeklyChart } from "@/components/Charts";
 import { useProfile } from "@/lib/useProfile";
 import { supabase } from "@/lib/supabase";
 import { PLASTICS } from "@/lib/plastics";
-import { useLang } from "@/lib/i18n";
+import { ownCorrections, ownImpact, ownQuality, type Impact, type OwnBatch, type Quality } from "@/lib/impact";
+import { useLang, type Key } from "@/lib/i18n";
 
-type Impact = { week: string; area: string; plastic: string; kg: number; co2e_kg: number };
 type Factor = { plastic: string; kg_co2e_per_kg: number; source: string };
-type Quality = { area: string; checked: number; match_pct: number };
 type Leader = { id: string; name: string; area: string; coins: number };
-type Data = { impact: Impact[]; factors: Factor[]; quality: Quality[]; leaders: Leader[]; corrections: number; asOf: number };
+// own: a user, collector or recycler sees only their own batches; Plant X sees every area
+type Data = { impact: Impact[]; factors: Factor[]; quality: Quality[]; leaders: Leader[]; corrections: number; asOf: number; own: boolean };
 
 const sum = (list: number[]) => list.reduce((a, b) => a + b, 0);
 const indian = (n: number) => Math.round(n).toLocaleString("en-IN"); // 1,74,50,776 style grouping
@@ -33,6 +33,21 @@ export default function ImpactDashboard() {
 
   useEffect(() => {
     if (!profile) return;
+    if (profile.role !== "plantx") {
+      // the database lets each person read only the batches they listed, collected or recycled
+      Promise.all([
+        supabase.from("batches").select("area, final_type, actual_type, actual_kg, ai_type, status, status_events(to_status, created_at)"),
+        supabase.from("emission_factors").select("*"),
+      ]).then(([b, f]) => {
+        const batches = (b.data ?? []) as OwnBatch[];
+        const factors = f.data ?? [];
+        setData({
+          impact: ownImpact(batches, factors), factors, quality: ownQuality(batches), leaders: [],
+          corrections: ownCorrections(batches), asOf: Date.now(), own: true,
+        });
+      });
+      return;
+    }
     Promise.all([
       supabase.from("impact_weekly").select("*").order("week"),
       supabase.from("emission_factors").select("*"),
@@ -42,6 +57,7 @@ export default function ImpactDashboard() {
     ]).then(([i, f, q, l, c]) => setData({
       impact: i.data ?? [], factors: f.data ?? [], quality: q.data ?? [], leaders: l.data ?? [], corrections: c.count ?? 0,
       asOf: Date.now(), // shown as "As on 12-11-2026"
+      own: false,
     }));
   }, [profile]);
 
@@ -66,7 +82,8 @@ export default function ImpactDashboard() {
   const kgPerDay = kgOf(lastFourWeeks) / 28;
   const co2PerDay = sum(impact.filter(lastFourWeeks).map((r) => Number(r.co2e_kg))) / 28;
   const checked = sum(quality.map((q) => q.checked));
-  const matchPct = sum(quality.map((q) => q.match_pct * q.checked)) / checked;
+  const matchPct = checked ? sum(quality.map((q) => q.match_pct * q.checked)) / checked : 0;
+  const nothingYet = data.own && impact.length === 0;
   const weekly = weeks.map((w) => ({
     week: new Date(w).toLocaleDateString(locale, { day: "numeric", month: "short" }),
     ...Object.fromEntries(PLASTICS.map((p) => [p, kgOf((r) => r.week === w && r.plastic === p)])),
@@ -98,7 +115,16 @@ export default function ImpactDashboard() {
         </dl>
         <p className="px-4 py-3 text-xs text-stone-500 sm:px-5">{t("dash.footnote")}</p>
       </section>
+      <p className="mt-3 text-sm font-medium text-brand-800">{t(`dash.scope.${profile!.role}` as Key)}</p>
 
+      {nothingYet && (
+        <section className="card mt-4 text-center">
+          <h2 className="heading">{t("dash.empty")}</h2>
+          <p className="muted mt-1">{t("dash.emptyText")}</p>
+        </section>
+      )}
+
+      {!nothingYet && (
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <section className="card lg:col-span-2">
           <h2 className="heading">{t("dash.weekly")}</h2>
@@ -106,6 +132,7 @@ export default function ImpactDashboard() {
           <p className="text-xs text-stone-500">{t("dash.lastBar")}</p>
         </section>
 
+        {checked > 0 && (
         <section className="card">
           <h2 className="heading">{t("dash.quality")}</h2>
           <p className="muted mt-0.5">{t("dash.qualityHelp")}</p>
@@ -121,11 +148,14 @@ export default function ImpactDashboard() {
           </dl>
           <AreaChart unit="%" max={100} data={quality.map((q) => ({ area: q.area, value: Number(q.match_pct) }))} />
         </section>
+        )}
 
+        {areas.length > 1 && (
         <section className="card">
           <h2 className="heading">{t("dash.byArea")}</h2>
           <AreaChart unit={` ${t("kg")}`} data={areas.map((a) => ({ area: a, value: kgOf((r) => r.area === a) })).sort((x, y) => y.value - x.value)} />
         </section>
+        )}
 
         <section className="card">
           <h2 className="heading">{t("dash.co2How")}</h2>
@@ -154,6 +184,7 @@ export default function ImpactDashboard() {
           </ul>
         </section>
 
+        {!data.own && (
         <section className="card">
           <h2 className="heading">{t("dash.forecast")}</h2>
           <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-3">
@@ -166,7 +197,9 @@ export default function ImpactDashboard() {
           </dl>
           <p className="mt-3 text-xs text-stone-500">{t("dash.forecastHelp")}</p>
         </section>
+        )}
 
+        {!data.own && (
         <section className="card">
           <h2 className="heading">{t("dash.top")}</h2>
           <p className="muted mt-0.5">{t("dash.topHelp")}</p>
@@ -179,6 +212,7 @@ export default function ImpactDashboard() {
             ))}
           </ol>
         </section>
+        )}
 
         <section className="card">
           <h2 className="heading">{t("dash.ai")}</h2>
@@ -187,10 +221,14 @@ export default function ImpactDashboard() {
           </p>
         </section>
       </div>
+      )}
 
-      <div className="mt-6 flex justify-end">
-        <button onClick={resetDemo} className="btn-secondary min-h-9 px-4 text-xs"><RotateCcw size={14} /> {t("dash.reset")}</button>
-      </div>
+      {/* only Plant X can reload the demo data */}
+      {!data.own && (
+        <div className="mt-6 flex justify-end">
+          <button onClick={resetDemo} className="btn-secondary min-h-9 px-4 text-xs"><RotateCcw size={14} /> {t("dash.reset")}</button>
+        </div>
+      )}
     </Shell>
   );
 }

@@ -28,10 +28,11 @@ import {
 import { translate } from "@/lib/strings";
 import { useLang, type Key } from "@/lib/i18n";
 
-// Households throw everything into one bag, so the Feed asks about the bag, not about each piece:
-// 1. one photo of the bag (proof, re-use check) and its size, 2. tap what's inside and count it,
-// 3. compare the list with the bag, choose the address and send. The photo AI is the helper for
-// anything the user can't name ("Scan it"), on one item or on everything tipped out on the floor.
+// First the Feed asks what the user is sending:
+// - separate items: photograph them and the photo AI reads each one (or tap and count them), then send;
+// - a bag of mixed waste: 1. one photo of the bag (proof, re-use check) and its size, 2. tap what's inside
+//   and count it, scanning anything the user can't name, 3. compare the list with the bag and send.
+// Internally the steps are 0 = the question, 1 = the bag, 2 = the items, 3 = check and send.
 
 const ICONS = { CupSoda, Droplet, Milk, ShoppingBag, Cookie, Package, SprayCan, PaintBucket };
 
@@ -42,7 +43,8 @@ type Item = {
   teaching?: "sending" | "failed"; taught?: Plastic; // "Teach Basellion" for a scanned item
 };
 type BagPhoto = { src: string; hash?: string; reused?: boolean };
-type Step = 1 | 2 | 3;
+type Step = 0 | 1 | 2 | 3;
+type Mode = "items" | "bag";
 
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
 let keys = 0; // unique keys for typed, chatted and scanned items
@@ -63,7 +65,9 @@ export default function FeedBasellion() {
   const profile = useProfile("generator");
   const router = useRouter();
   const { t } = useLang();
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState<Step>(0);
+  const [mode, setMode] = useState<Mode | null>(null);
+  const [scanPhotos, setScanPhotos] = useState<{ hash: string; reused: boolean }[]>([]); // re-use check for item photos
   const [bag, setBag] = useState<BagPhoto | null>(null);
   const [size, setSize] = useState<BagSize | null>(null);
   const [full, setFull] = useState<boolean | null>(null);
@@ -156,6 +160,8 @@ export default function FeedBasellion() {
     const img = new Image();
     img.src = src;
     await img.decode();
+    const hash = photoHash(img);
+    supabase.rpc("photo_used", { hash }).then(({ data: reused }) => setScanPhotos((list) => [...list, { hash, reused: !!reused }]));
     // items laid apart on a plain floor are split by colour; else the detector skips people and furniture;
     // an item held up in a hand is matched against taught items; otherwise the whole photo is one item
     let boxes = findItems(img);
@@ -199,6 +205,9 @@ export default function FeedBasellion() {
     : t("sum.empty");
 
   // what is still missing on this step, shown under the button
+  const order: Step[] = mode === "bag" ? [1, 2, 3] : [2, 3]; // the steps this user goes through
+  const reused = !!bag?.reused || scanPhotos.some((p) => p.reused);
+  const back = () => setStep(step === 3 ? 2 : step === 2 && mode === "bag" ? 1 : 0);
   let todo = "";
   if (step === 1 && !bag) todo = t("todo.bagPhoto");
   else if (step === 1 && !range) todo = t("todo.bagSize");
@@ -209,13 +218,13 @@ export default function FeedBasellion() {
 
   // save the listing while Basellion eats it (the animation takes about 1.5 s anyway)
   async function send() {
-    if (!profile || !canGo || !address || !main || !range || !size) return;
+    if (!profile || !canGo || !address || !main || (mode === "bag" && (!range || !size))) return;
     setEating(true);
     window.scrollTo({ top: 0, behavior: "smooth" }); // so the user sees Basellion eat it
     const scanned = kept.filter((it) => it.guess);
     const aiTypes = scanned.map((it) => it.guess!.type);
     const aiMain = aiTypes.sort((a, b) => aiTypes.filter((x) => x === b).length - aiTypes.filter((x) => x === a).length)[0] ?? null;
-    const sizeName = `${translate("en", `bag.${size}` as Key)} bag, ${full ? "full" : "half full"}`; // the log stays in English
+    const sizeName = mode === "bag" && size ? `${translate("en", `bag.${size}` as Key)} bag, ${full ? "full" : "half full"}` : "separate items"; // the log stays in English
     const [{ data, error }] = await Promise.all([
       supabase.from("batches").insert({
         area: address.area,
@@ -226,12 +235,12 @@ export default function FeedBasellion() {
         final_type: main,
         user_confirmed: true, // the user listed every item
         // checked at pickup: anything "not sure", an unsure scan or chat guess, a list that doesn't fit the bag, a re-used photo
-        verify_at_pickup: unsure > 0 || check !== "ok" || !!bag?.reused
+        verify_at_pickup: unsure > 0 || check !== "ok" || reused
           || kept.some((it) => (it.guess && band(it.guess.confidence) !== "auto") || (it.source === "chat" && !it.sure)),
-        photo_hashes: bag?.hash ? [bag.hash] : [],
+        photo_hashes: [...(bag?.hash ? [bag.hash] : []), ...scanPhotos.map((p) => p.hash)],
         declared_kg: kg,
         last_note: [sizeName, ...types.map((x) => `${x.count} ${x.type}`), ...(unsure ? [`${unsure} not sure`] : []),
-          ...(check !== "ok" ? ["list and bag size don't match"] : []), ...(bag?.reused ? ["the bag photo was used before"] : [])].join(", "),
+          ...(check !== "ok" ? ["list and bag size don't match"] : []), ...(reused ? ["a photo was used before"] : [])].join(", "),
       }).select("*").single(),
       wait(1600),
     ]);
@@ -256,7 +265,9 @@ export default function FeedBasellion() {
   // Booked: show it under "My waste", and clear this page, which Next keeps alive for the next time Feed is opened
   function finish() {
     router.push("/user/waste");
-    setStep(1);
+    setStep(0);
+    setMode(null);
+    setScanPhotos([]);
     setBag(null);
     setSize(null);
     setFull(null);
@@ -273,6 +284,7 @@ export default function FeedBasellion() {
   else if (eating) [mood, message] = ["eating", undefined];
   else if (snack) [mood, message, eaten] = [snack.mood, snack.mood === "eating" ? t("m.eating") : t("m.spitting"), snack.item];
   else if (scanning) [mood, message] = ["thinking", t("items.scanning")];
+  else if (step === 0) message = t("m.what");
   else if (step === 2 && lastScan?.type === "UNCLEAR") [mood, message, eaten] = ["spitting", t("m.allNot"), lastScan.crop];
   else if (step === 3 && check === "fewer") [mood, message] = ["thinking", t("m.fewer")];
   else if (step === 3 && check === "more") [mood, message] = ["thinking", t("m.more")];
@@ -318,6 +330,20 @@ export default function FeedBasellion() {
     </div>
   );
   const extras = items.filter((it) => it.source !== "list");
+  // the photo AI: the main way in for separate items, the helper for anything unnamed in a bag
+  const scanCard = (
+    <section className="card space-y-3">
+      <div className="flex gap-3">
+        <ScanLine size={22} className="mt-0.5 shrink-0 text-brand-700" />
+        <div>
+          <h3 className="font-semibold text-brand-950">{t(mode === "items" ? "items.photoTitle" : "items.scanTitle")}</h3>
+          <p className="text-sm text-stone-500">{t(mode === "items" ? "items.photoHelp" : "items.scanHelp")}</p>
+        </div>
+      </div>
+      {photoButtons("scan", true)}
+      {scanning > 0 && <p role="status" className="text-sm font-medium text-brand-800">{t("items.scanning")}</p>}
+    </section>
+  );
 
   return (
     <Shell profile={profile} title={t("home.feed")}>
@@ -332,16 +358,34 @@ export default function FeedBasellion() {
         </div>
 
         <div className="min-w-0 space-y-4">
-          {!batch && (
+          {!batch && step > 0 && (
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold tracking-[0.12em] text-brand-600 uppercase">{t("bag.stepOf", { n: step })}</p>
-                <h2 className="heading text-xl">{t(`bag.step.${step}` as Key)}</h2>
+                <p className="text-xs font-semibold tracking-[0.12em] text-brand-600 uppercase">{t("bag.stepOf", { n: order.indexOf(step) + 1, total: order.length })}</p>
+                <h2 className="heading text-xl">{t(step === 2 && mode === "items" ? "bag.step.items" : (`bag.step.${step}` as Key))}</h2>
               </div>
               <div aria-hidden className="flex gap-1.5">
-                {[1, 2, 3].map((n) => <span key={n} className={`h-2 w-6 rounded-full ${n <= step ? "bg-brand-600" : "bg-stone-200"}`} />)}
+                {order.map((n) => <span key={n} className={`h-2 w-6 rounded-full ${n <= step ? "bg-brand-600" : "bg-stone-200"}`} />)}
               </div>
             </div>
+          )}
+
+          {/* ---------- 0. separate items, or a bag? ---------- */}
+          {!batch && step === 0 && (
+            <section className="card">
+              <h2 className="heading text-xl">{t("mode.title")}</h2>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {([["items", ScanLine, 2], ["bag", ShoppingBag, 1]] as const).map(([m, Icon, first]) => (
+                  <button key={m} onClick={() => { setMode(m); setStep(first); }} className="option flex min-h-28 items-start gap-3 rounded-2xl p-4">
+                    <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-brand-100 text-brand-800"><Icon size={22} /></span>
+                    <span>
+                      <b className="block text-base text-brand-950">{t(`mode.${m}`)}</b>
+                      <span className="mt-0.5 block text-sm text-stone-600">{t(`mode.${m}Hint`)}</span>
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </section>
           )}
 
           {/* ---------- 1. the bag ---------- */}
@@ -396,8 +440,9 @@ export default function FeedBasellion() {
           {/* ---------- 2. what's inside ---------- */}
           {!batch && step === 2 && (
             <>
+              {mode === "items" && scanCard}
               <section className="card">
-                <p className="text-sm text-stone-500">{t("items.tap")}</p>
+                <p className="text-sm text-stone-500">{t(mode === "items" ? "items.orTap" : "items.tap")}</p>
                 <ul className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {CATALOGUE.map((c) => {
                     const Icon = ICONS[c.icon];
@@ -441,7 +486,7 @@ export default function FeedBasellion() {
 
                 {extras.length > 0 && (
                   <>
-                    <h3 className="mt-5 text-sm font-semibold text-brand-950">{t("items.list")}</h3>
+                    <h3 className="mt-5 text-sm font-semibold text-brand-950">{t(mode === "items" ? "bag.step.items" : "items.list")}</h3>
                     <ul className="mt-1 divide-y divide-stone-200">
                       {extras.map((it) => {
                         const g = it.guess;
@@ -516,35 +561,28 @@ export default function FeedBasellion() {
                 )}
               </section>
 
-              {/* the photo AI as the helper for anything the user can't name */}
-              <section className="card space-y-3">
-                <div className="flex gap-3">
-                  <ScanLine size={22} className="mt-0.5 shrink-0 text-brand-700" />
-                  <div>
-                    <h3 className="font-semibold text-brand-950">{t("items.scanTitle")}</h3>
-                    <p className="text-sm text-stone-500">{t("items.scanHelp")}</p>
-                  </div>
-                </div>
-                {photoButtons("scan", true)}
-                {scanning > 0 && <p role="status" className="text-sm font-medium text-brand-800">{t("items.scanning")}</p>}
-              </section>
+              {mode === "bag" && scanCard}
 
               <AskBasellion onAdd={addFromChat} />
             </>
           )}
 
           {/* ---------- 3. check and send ---------- */}
-          {!batch && step === 3 && range && size && (
+          {!batch && step === 3 && (
             <>
               <section className="card space-y-3">
-                <h3 className="font-semibold text-brand-950">{t("check.title")}</h3>
+                {range && size && <h3 className="font-semibold text-brand-950">{t("check.title")}</h3>}
                 <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm">
-                  <dt className="text-stone-500">{t("check.bag", { size: t(`bag.${size}` as Key), fullness: t(full ? "bag.full" : "bag.half") })}</dt>
-                  <dd className="text-right font-medium tabular-nums">{t("check.bagKg", { min: kgText(range[0]), max: kgText(range[1]) })}</dd>
+                  {range && size && (
+                    <>
+                      <dt className="text-stone-500">{t("check.bag", { size: t(`bag.${size}` as Key), fullness: t(full ? "bag.full" : "bag.half") })}</dt>
+                      <dd className="text-right font-medium tabular-nums">{t("check.bagKg", { min: kgText(range[0]), max: kgText(range[1]) })}</dd>
+                    </>
+                  )}
                   <dt className="text-stone-500">{t("check.list")}</dt>
-                  <dd className="text-right font-medium tabular-nums">{t("sum.about", { kg })}</dd>
+                  <dd className="text-right font-medium tabular-nums">{summary}</dd>
                 </dl>
-                {check === "ok" ? (
+                {!range ? null : check === "ok" ? (
                   <p className="flex items-center gap-2 rounded-lg bg-brand-50 p-3 text-sm font-medium text-brand-900"><Check size={16} /> {t("check.ok")}</p>
                 ) : (
                   <div className="space-y-2 rounded-lg bg-brand-50 p-3 text-sm text-brand-900">
@@ -558,7 +596,7 @@ export default function FeedBasellion() {
                   </div>
                 )}
                 {leftOut.length > 0 && <p className="text-sm text-stone-500">{t("items.leftOut")}</p>}
-                {bag?.reused && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{t("feed.reused")}</p>}
+                {reused && <p role="alert" className="rounded-lg bg-red-50 p-3 text-sm text-red-800">{t("feed.reused")}</p>}
               </section>
 
               <section className="card">
@@ -591,15 +629,13 @@ export default function FeedBasellion() {
           )}
 
           {/* the step's buttons, always in reach of the thumb: above the tab bar on phones */}
-          {!batch && (
+          {!batch && step > 0 && (
             <div className="sticky bottom-[calc(6rem+env(safe-area-inset-bottom))] z-20 rounded-2xl border border-stone-200 bg-paper/95 p-3 shadow-[0_6px_24px_rgba(49,87,44,0.14)] backdrop-blur md:bottom-4">
               <p aria-live="polite" className="mb-2 truncate text-center text-sm font-medium text-brand-900 tabular-nums">{step > 1 ? summary : todo || t("bag.range", { min: kgText(range![0]), max: kgText(range![1]) })}</p>
-              <div className={`grid gap-2 ${step > 1 ? "grid-cols-[auto_1fr]" : ""}`}>
-                {step > 1 && (
-                  <button onClick={() => setStep((step - 1) as Step)} disabled={eating} className="btn-secondary min-h-12 px-4" aria-label={t("signup.back")}>
-                    <ArrowLeft size={18} /><span className="sr-only sm:not-sr-only">{t("signup.back")}</span>
-                  </button>
-                )}
+              <div className="grid grid-cols-[auto_1fr] gap-2">
+                <button onClick={back} disabled={eating} className="btn-secondary min-h-12 px-4" aria-label={t("signup.back")}>
+                  <ArrowLeft size={18} /><span className="sr-only sm:not-sr-only">{t("signup.back")}</span>
+                </button>
                 <button onClick={() => (step < 3 ? setStep((step + 1) as Step) : send())} disabled={!canGo} className="btn-primary min-h-12 text-base">
                   {step < 3 ? t("bag.next") : eating ? t("feed.eating") : t("feed.send")}
                 </button>
