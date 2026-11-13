@@ -37,6 +37,27 @@ export function photoHash(pic: Picture) {
   return BigInt("0b" + bits).toString(16).padStart(16, "0");
 }
 
+// Phone photos are 12 megapixels or more; the model looks at 224 x 224 and the detector at 300 x 300.
+// Working on the full photo only slowed the phone down, so photos are made at most this many pixels long.
+export const LONGEST = 1600;
+
+// A smaller copy of a photo (same picture), as a new local URL; small photos come back unchanged
+export async function shrink(src: string, longest = LONGEST) {
+  const img = new Image();
+  img.src = src;
+  await img.decode();
+  const scale = longest / Math.max(img.naturalWidth, img.naturalHeight);
+  if (scale >= 1) return src;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(img.naturalWidth * scale);
+  canvas.height = Math.round(img.naturalHeight * scale);
+  canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+  const blob = await new Promise<Blob | null>((done) => canvas.toBlob(done, "image/jpeg", 0.9));
+  if (!blob) return src;
+  URL.revokeObjectURL(src);
+  return URL.createObjectURL(blob);
+}
+
 // A small JPEG of what the model looked at (centre square, 224 px), to send with a correction
 export async function smallJpeg(src: string) {
   const img = new Image();

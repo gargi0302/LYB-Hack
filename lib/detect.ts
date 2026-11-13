@@ -2,7 +2,7 @@ import type { ObjectDetection } from "@tensorflow-models/coco-ssd";
 import { classifyMany, loadTf, type Guess } from "./classify";
 import { cropCanvas } from "./image";
 import { partsOf, type Box } from "./objects";
-import { withCorrections } from "./teach";
+import { hasCorrections, withCorrections } from "./teach";
 
 // Things in a photo that are never the waste itself: people (and their hands), furniture,
 // screens, appliances, animals, vehicles. The detector knows 80 everyday object types.
@@ -50,6 +50,7 @@ function overlap(a: Box, b: Box) {
 // photo and keep the one that matches an item people taught Basellion (lib/teach.ts). Our model alone
 // is not trusted here: in testing it read a dark shirt as LDPE, so with no match the whole photo is used.
 export async function findHeldItem(img: HTMLImageElement): Promise<Box[]> {
+  if (!(await hasCorrections())) return []; // nothing taught: ~30 model runs that can't find anything
   const parts = partsOf(img.naturalWidth / img.naturalHeight);
   const guesses = await Promise.all((await classifyMany(parts.map((box) => cropCanvas(img, box)))).map(withCorrections));
   const score = (g: Guess) => (g.learned ? g.confidence : 0); // confidence of a learned guess = similarity

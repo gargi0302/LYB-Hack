@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Camera as CameraIcon, Check, GraduationCap, ImagePlus, MessageCircle, X } from "lucide-react";
@@ -14,7 +14,7 @@ import { Hills, worldStyle } from "@/components/World";
 import { addressText } from "@/lib/areas";
 import { supabase, type Address, type Batch, type Plastic } from "@/lib/supabase";
 import { classifyMany, type Guess } from "@/lib/classify";
-import { cropCanvas, photoHash, smallJpeg } from "@/lib/image";
+import { cropCanvas, photoHash, shrink, smallJpeg } from "@/lib/image";
 import { findItems, type Box } from "@/lib/objects";
 import { findHeldItem, findObjects } from "@/lib/detect";
 import { teach, withCorrections } from "@/lib/teach";
@@ -64,9 +64,16 @@ export default function FeedBasellion() {
 
   const update = (key: string, change: Partial<Item>) => setItems((list) => list.map((it) => (it.key === key ? { ...it, ...change } : it)));
 
-  // Add a photo: find the items in it (ignoring people, tables, walls...), then let our model
+  // Photos are read one after another: several at once (quick camera taps) used to freeze the page
+  const queue = useRef<Promise<void>>(Promise.resolve());
+  function addPhoto(original: string) {
+    queue.current = queue.current.then(() => readPhoto(original)).catch(() => {});
+  }
+
+  // Read a photo: find the items in it (ignoring people, tables, walls...), then let our model
   // look at each item on its own. All of this runs on the phone.
-  async function addPhoto(src: string) {
+  async function readPhoto(original: string) {
+    const src = await shrink(original);
     setPhotos((list) => (list.length >= MAX_PHOTOS ? list : [...list, { src, boxes: null }]));
     const img = new Image();
     img.src = src;
@@ -458,11 +465,7 @@ export default function FeedBasellion() {
       </div>
 
       {camera && (
-        <Camera taken={photos.length} max={MAX_PHOTOS} onClose={() => setCamera(false)}
-          onPhoto={(src) => {
-            addPhoto(src);
-            if (photos.length + 1 >= MAX_PHOTOS) setCamera(false);
-          }} />
+        <Camera taken={photos.length} max={MAX_PHOTOS} onClose={() => setCamera(false)} onPhoto={addPhoto} />
       )}
     </Shell>
   );

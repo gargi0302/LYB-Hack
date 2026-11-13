@@ -12,6 +12,11 @@ function memories() {
   return saved;
 }
 
+// Whether anyone has taught Basellion anything yet (if not, there is nothing to look for)
+export async function hasCorrections() {
+  return (await memories()).length > 0;
+}
+
 // The model's guess, replaced by what people taught when this photo looks like one they corrected
 export async function withCorrections(guess: Guess): Promise<Guess> {
   const learned = recall(await memories(), guess.embedding);
