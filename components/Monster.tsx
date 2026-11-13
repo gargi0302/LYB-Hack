@@ -92,7 +92,7 @@ export default function Monster({ mood, item, message, size = 190, fill = false,
         <p aria-live="polite" className="relative mb-3 max-w-64 rounded-2xl border border-stone-200 bg-white px-4 py-2 text-center text-sm font-medium text-brand-950">
           {said}
           {/* the little tail pointing down at Basellion */}
-          <span aria-hidden className="absolute -bottom-[7px] left-1/2 h-3 w-3 -transtone-x-1/2 rotate-45 border-r border-b border-stone-200 bg-white" />
+          <span aria-hidden className="absolute -bottom-[7px] left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-r border-b border-stone-200 bg-white" />
         </p>
       )}
       <Wrap className={`relative transition-[width,height] duration-700 ease-out ${fill ? "aspect-square min-h-0 flex-1" : ""}`} style={fill ? undefined : { width: size, height: size }} onClick={onTap} aria-label={onTap ? t("m.tap") : undefined}>

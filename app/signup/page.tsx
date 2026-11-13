@@ -88,11 +88,12 @@ export default function SignUp() {
   }
 
   return (
-    <AuthShell title={t("signup.title")} eyebrow={`${t("signup.step", { n: step + 1 })} · ${t(STEPS[step])}`} progress={(step + 1) / STEPS.length}>
+    <AuthShell onBack={() => { if (busy) return; setError(""); if (step) setStep(step - 1); else router.push("/"); }}
+      title={t("signup.title")} eyebrow={`${t("signup.step", { n: step + 1 })} · ${t(STEPS[step])}`} progress={(step + 1) / STEPS.length}>
       <form onSubmit={submit} noValidate className="flex flex-1 flex-col">
         {/* 1. account type: one list, one choice */}
         <div data-step={0} hidden={step !== 0}>
-          <div role="group" aria-label={t("signup.type")} className="divide-y divide-stone-200 overflow-hidden rounded-lg border border-stone-200 bg-white">
+          <div role="group" aria-label={t("signup.type")} className="divide-y divide-stone-200 overflow-hidden rounded-2xl border border-stone-200 bg-white">
             {ROLES.map(({ role: r, Icon, hint }) => (
               <button key={r} type="button" onClick={() => setRole(r)} aria-pressed={role === r}
                 className="group flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors hover:bg-stone-50 aria-pressed:bg-brand-50">
@@ -134,7 +135,7 @@ export default function SignUp() {
                 <legend className="text-xs font-medium text-stone-500">{t("signup.accepts")}</legend>
                 <div className="mt-1 flex flex-wrap gap-1.5">
                   {PLASTICS.map((p) => (
-                    <label key={p} className="flex h-9 cursor-pointer items-center rounded-md border border-stone-300 bg-white px-3 text-xs font-semibold transition-colors has-checked:border-brand-700 has-checked:bg-brand-50 has-checked:text-brand-950 has-focus-visible:ring-2 has-focus-visible:ring-brand-600">
+                    <label key={p} className="flex h-9 cursor-pointer items-center rounded-full border border-stone-300 bg-white px-3 text-xs font-semibold transition-colors has-checked:border-brand-700 has-checked:bg-brand-50 has-checked:text-brand-950 has-focus-visible:ring-2 has-focus-visible:ring-brand-600">
                       <input type="checkbox" name="types" value={p} className="sr-only" /> {p}
                     </label>
                   ))}
@@ -155,7 +156,7 @@ export default function SignUp() {
           <Field label={<>{t("login.password")} <span className="font-normal">{t("signup.min")}</span></>} className="pr-11">
             <input name="password" type={showPassword ? "text" : "password"} required minLength={6} className="field-input" autoComplete="new-password" />
             <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? t("login.hide") : t("login.show")}
-              className="absolute top-1/2 right-1.5 grid h-9 w-9 -transtone-y-1/2 place-items-center rounded-md text-stone-500 hover:text-brand-950">
+              className="absolute top-1/2 right-1.5 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full text-stone-500 hover:text-brand-950">
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </Field>
@@ -166,14 +167,9 @@ export default function SignUp() {
 
         {/* actions: at the foot of the screen on phones, right under the fields on wide screens */}
         <div className="mt-auto pt-6">
-          <div className={`grid gap-2 ${step > 0 ? "grid-cols-[auto_1fr]" : ""}`}>
-            {step > 0 && (
-              <button type="button" onClick={() => { setError(""); setStep(step - 1); }} disabled={busy} className="btn-secondary min-h-12 rounded-lg! px-5">{t("signup.back")}</button>
-            )}
-            <button disabled={busy} className="btn-primary min-h-12 rounded-lg! text-base">
-              {step < LAST ? t("signup.next") : busy ? t("signup.busy") : t("signup.button")}
-            </button>
-          </div>
+          <button disabled={busy} className="btn-primary min-h-12 w-full text-base">
+            {step < LAST ? t("signup.next") : busy ? t("signup.busy") : t("signup.button")}
+          </button>
           <p className="mt-3 text-center text-sm text-stone-500">
             {t("signup.have")} <Link href="/" className="font-semibold text-brand-950 hover:text-brand-700">{t("login.title")}</Link>
           </p>

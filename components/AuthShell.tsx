@@ -1,5 +1,5 @@
 "use client";
-import { MapPin, QrCode, ScanLine } from "lucide-react";
+import { ArrowLeft, MapPin, QrCode, ScanLine } from "lucide-react";
 import Logo from "./Logo";
 import Monster from "./Monster";
 import LanguageSwitch from "./LanguageSwitch";
@@ -22,11 +22,13 @@ const FEATURES: { Icon: typeof ScanLine; text: Key }[] = [
 // title/eyebrow/progress: the page heading, e.g. "Create your account", "Step 2 of 4 · Personal details"
 // and a 0–1 progress line. Without a title (login) the band shows the app's headline instead.
 // greet: Basellion's speech bubble (login only, it says hello once).
-export default function AuthShell({ title, eyebrow, progress, greet = false, children }: {
+// onBack: shows a small "Back" link above the form (the previous sign-up step, or the login page).
+export default function AuthShell({ title, eyebrow, progress, greet = false, onBack, children }: {
   title?: string;
   eyebrow?: string;
   progress?: number;
   greet?: boolean;
+  onBack?: () => void;
   children: React.ReactNode;
 }) {
   const { t } = useLang();
@@ -94,6 +96,12 @@ export default function AuthShell({ title, eyebrow, progress, greet = false, chi
 
       <section className="flex flex-1 shrink-0 flex-col bg-cream px-5 pt-5 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:px-8 lg:justify-center lg:py-8">
         <div className="mx-auto flex w-full max-w-[400px] flex-1 flex-col lg:flex-none">
+          {onBack && (
+            <button type="button" onClick={onBack}
+              className="-ml-2 mb-3 inline-flex items-center gap-1.5 self-start rounded-full px-2 py-1 text-sm font-medium text-brand-700 hover:bg-brand-50 hover:text-brand-950">
+              <ArrowLeft size={16} /> {t("signup.back")}
+            </button>
+          )}
           {title && (
             <div className="mb-6 hidden lg:block">
               {eyebrow && <p className="text-[11px] font-semibold tracking-[0.14em] text-brand-600 uppercase">{eyebrow}</p>}

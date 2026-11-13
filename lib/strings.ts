@@ -45,7 +45,7 @@ const STRINGS = {
   "m.done": ["Delicious! Now choose who picks it up.", "स्वादिष्ट! अब चुनें कि कौन उठाएगा।", "स्वादिष्ट! आता कोण उचलणार ते निवडा."],
   "m.allNot": ["Bleh! That's not plastic I can eat.", "छी! यह वो प्लास्टिक नहीं जो मैं खा सकूँ।", "शी! हे मी खाऊ शकेन असे प्लास्टिक नाही."],
   "m.missing": ["I can't tell what number {n} is. Can you tell me?", "मैं नहीं समझ पा रहा कि नंबर {n} क्या है। आप बताएँगे?", "क्रमांक {n} काय आहे ते मला कळत नाही. सांगाल का?"],
-  "m.skip": ["Bleh! I'll skip number {n}, it's not plastic.", "छी! नंबर {n} छोड़ रहा हूँ, यह प्लास्टिक नहीं है।", "शी! क्रमांक {n} वगळतो, ते प्लास्टिक नाही."],
+  "m.skip": ["Bleh! I'll skip number {n}, I can't recycle it.", "छी! नंबर {n} छोड़ रहा हूँ, इसे मैं रीसायकल नहीं कर सकता।", "शी! क्रमांक {n} वगळतो, ते मी रिसायकल करू शकत नाही."],
   "m.ready": ["Yum! {what}. Send them over.", "वाह! {what}। भेज दो।", "वा! {what}. पाठवून द्या."],
 
   // sign in
@@ -164,7 +164,7 @@ const STRINGS = {
   "feed.typical": ["typical, check the pack", "आम तौर पर, पैकेट पर जाँचें", "साधारणपणे, पाकिटावर तपासा"],
   "feed.checking": ["Checking…", "जाँच रहे हैं…", "तपासत आहे…"],
   "feed.cant": ["The AI can't identify this one", "AI इसे नहीं पहचान पाया", "AI ला ही वस्तू ओळखता आली नाही"],
-  "feed.notPlastic": ["not plastic", "प्लास्टिक नहीं", "प्लास्टिक नाही"],
+  "feed.notPlastic": ["not recyclable here", "यहाँ रीसायकल नहीं होता", "इथे रिसायकल होत नाही"],
   "feed.check": ["please check", "कृपया जाँचें", "कृपया तपासा"],
   "feed.howMany": ["How many", "कितने", "किती"],
   "feed.notRight": ["Not right? Tell us what it is", "सही नहीं? बताएँ यह क्या है", "बरोबर नाही? ही काय आहे ते सांगा"],
@@ -174,7 +174,7 @@ const STRINGS = {
   "feed.use": ["Use {type}", "{type} चुनें", "{type} निवडा"],
   "feed.choose": ["Choose category", "श्रेणी चुनें", "प्रकार निवडा"],
   "feed.categoryOf": ["Category of item {n}", "चीज़ {n} की श्रेणी", "वस्तू {n} चा प्रकार"],
-  "feed.leaveOut": ["Not plastic, leave it out", "प्लास्टिक नहीं, इसे छोड़ दें", "प्लास्टिक नाही, ही वगळा"],
+  "feed.leaveOut": ["Not recyclable here, leave it out", "यहाँ रीसायकल नहीं होता, इसे छोड़ दें", "इथे रिसायकल होत नाही, ही वगळा"],
   "teach.ask": ["Basellion said {ai}. Teach it that this is {type}?", "बेसेलियन ने {ai} बताया। उसे सिखाएँ कि यह {type} है?", "बेसेलियनने {ai} सांगितले. त्याला शिकवा की हे {type} आहे?"],
   "teach.askName": ["Teach Basellion that this is {name} ({type})?", "बेसेलियन को सिखाएँ कि यह {name} ({type}) है?", "बेसेलियनला शिकवा की हे {name} ({type}) आहे?"],
   "teach.button": ["Teach Basellion", "बेसेलियन को सिखाएँ", "बेसेलियनला शिकवा"],

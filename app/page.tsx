@@ -65,7 +65,7 @@ export default function Login() {
           <input id="password" type={showPassword ? "text" : "password"} required value={password} onChange={(e) => setPassword(e.target.value)}
             className="field-input" autoComplete="current-password" />
           <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? t("login.hide") : t("login.show")}
-            className="absolute top-1/2 right-1.5 grid h-9 w-9 -transtone-y-1/2 place-items-center rounded-md text-stone-500 hover:text-brand-950">
+            className="absolute top-1/2 right-1.5 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full text-stone-500 hover:text-brand-950">
             {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
@@ -79,11 +79,11 @@ export default function Login() {
         </div>
 
         {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-        {notice && <p role="status" className="rounded-lg bg-brand-50 px-3 py-2 text-sm text-brand-900">{notice}</p>}
+        {notice && <p role="status" className="rounded-xl bg-brand-50 px-3 py-2 text-sm text-brand-900">{notice}</p>}
 
         {/* actions: at the foot of the screen on phones, right under the fields on wide screens */}
         <div className="mt-auto pt-4">
-          <button disabled={busy} className="btn-primary min-h-12 w-full rounded-lg! text-base">{busy ? t("login.busy") : t("login.title")}</button>
+          <button disabled={busy} className="btn-primary min-h-12 w-full text-base">{busy ? t("login.busy") : t("login.title")}</button>
           <p className="mt-3 text-center text-sm text-stone-500">
             {t("login.new")} <Link href="/signup" className="font-semibold text-brand-950 hover:text-brand-700">{t("login.create")}</Link>
           </p>

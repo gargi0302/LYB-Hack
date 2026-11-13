@@ -85,7 +85,7 @@ export default function UserHome() {
             <Leaf size={20} className="shrink-0 text-brand-800" />
             {t("home.co2", { kg: Math.round(myCo2).toLocaleString("en-IN") })}
           </p>
-          <Link href="/user/new" className="btn-primary relative mt-1 min-h-12 w-full bg-gradient-to-b from-brand-700 to-brand-900 font-display text-base shadow-[0_6px_18px_rgba(49,87,44,0.18)] transition-[translate,box-shadow] hover:-transtone-y-px md:min-h-14 md:text-lg">
+          <Link href="/user/new" className="btn-primary relative mt-1 min-h-12 w-full bg-gradient-to-b from-brand-700 to-brand-900 font-display text-base shadow-[0_6px_18px_rgba(49,87,44,0.18)] transition-[translate,box-shadow] hover:-translate-y-px md:min-h-14 md:text-lg">
             <Camera size={20} /> {t("home.feed")}
           </Link>
         </div>
