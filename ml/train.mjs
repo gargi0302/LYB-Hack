@@ -11,25 +11,44 @@ import "@tensorflow/tfjs-backend-wasm";
 const LABELS = ["PET", "HDPE", "PP", "LDPE", "UNCLEAR"]; // same order as the app uses
 const WIDTH = process.argv[2] || "0.50";
 const BASE_URL = `https://storage.googleapis.com/tfjs-models/tfjs/mobilenet_v1_${WIDTH}_224/model.json`;
-const OUT = "public/model";
+const OUT = process.env.OUT ?? "public/model";
+// training copies of every photo: as it is, black and white, and flipped + zoomed in (AUG=0 leaves that out)
+const VERSIONS = process.env.AUG === "0" ? ["plain", "grey"] : ["plain", "grey", "zoom"];
 
 await tf.setBackend("wasm");
 
+// a number from 0 to 1 that is always the same for the same file name, so runs can be repeated
+const fraction = (name, salt) => [...name + salt].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7) / 2 ** 32;
+
 // Centre-crop to a square, resize to 224x224 and scale pixels to [-1, 1].
 // The browser code in lib/classify.ts must do exactly the same thing.
-async function loadImage(file, grey = false) {
-  const raw = await sharp(file).resize(224, 224, { fit: "cover" }).removeAlpha().raw().toBuffer();
+// "zoom": a mirrored 75% part of the photo, as if taken closer and from the other side.
+async function loadImage(file, version = "plain") {
+  let image = sharp(file).rotate();
+  if (version === "zoom") {
+    const { width, height } = await image.metadata();
+    const w = Math.round(width * 0.75), h = Math.round(height * 0.75);
+    const left = Math.round((width - w) * fraction(file, "x")), top = Math.round((height - h) * fraction(file, "y"));
+    image = sharp(await image.extract({ left, top, width: w, height: h }).flop().toBuffer());
+  }
+  const raw = await image.resize(224, 224, { fit: "cover" }).removeAlpha().raw().toBuffer();
   return tf.tidy(() => {
     const rgb = tf.tensor3d(new Uint8Array(raw), [224, 224, 3]).toFloat();
-    return (grey ? rgb.mean(2, true).tile([1, 1, 3]) : rgb).div(127.5).sub(1);
+    return (version === "grey" ? rgb.mean(2, true).tile([1, 1, 3]) : rgb).div(127.5).sub(1);
   });
 }
 
-// every 5th photo of each class goes to the test set, the rest is for training
+// every 5th photo of each class goes to the test set, the rest is for training.
+// A room and its zoomed-in part ("_part") always go to the same side, so the test stays honest.
+// Crops of our own photos ("own_", from ml/own.mjs) are many copies of a few photos, so they are
+// only trained on; ml/check.mjs on the held-out photos in ml/own/test_* checks them instead.
 const train = [], test = [];
 LABELS.forEach((label, i) => {
   const files = fs.readdirSync(path.join("ml/data", label)).sort();
-  files.forEach((f, n) => (n % 5 === 0 ? test : train).push({ file: path.join("ml/data", label, f), y: i }));
+  for (const f of files.filter((f) => f.startsWith("own_"))) train.push({ file: path.join("ml/data", label, f), y: i });
+  const groups = [...new Set(files.filter((f) => !f.startsWith("own_")).map((f) => f.replace(/_part(?=\.)/, "")))];
+  const inTest = new Set(groups.filter((_, n) => n % 5 === 0));
+  for (const f of files.filter((f) => !f.startsWith("own_"))) (inTest.has(f.replace(/_part(?=\.)/, "")) ? test : train).push({ file: path.join("ml/data", label, f), y: i });
 });
 console.log(`train ${train.length} photos, test ${test.length} photos`);
 
@@ -39,13 +58,14 @@ const cut = mobilenet.getLayer("conv_pw_13_relu");
 const base = tf.model({ inputs: mobilenet.inputs, outputs: cut.output });
 
 // Training photos are also used in black and white, so the model can't lean on colour alone
-// (lots of LDPE photos are black bin bags, which made a black tiffin look like LDPE).
+// (lots of LDPE photos are black bin bags, which made a black tiffin look like LDPE), and flipped
+// and zoomed in, so a new angle or framing of a known kind of item isn't new to it.
 // Test photos are only used as they are, so the test score stays honest.
 async function features(set, versions) {
   const out = [], ys = [];
   for (const { file, y } of set) {
-    for (const grey of versions) {
-      const img = await loadImage(file, grey);
+    for (const version of versions) {
+      const img = await loadImage(file, version);
       // averaged right away (1024 numbers a photo): the full 7x7 maps of every photo don't fit in memory
       out.push(tf.tidy(() => base.predict(img.expandDims()).mean([1, 2])));
       ys.push(y);
@@ -54,8 +74,8 @@ async function features(set, versions) {
   }
   return { x: tf.concat(out), y: tf.oneHot(ys, LABELS.length) };
 }
-const trainData = await features(train, [false, true]);
-const testData = await features(test, [false]);
+const trainData = await features(train, VERSIONS);
+const testData = await features(test, ["plain"]);
 
 // the only part we train: one hidden layer on the averaged features, then 5 outputs
 const head = tf.sequential({
@@ -102,7 +122,7 @@ const results = {
   confidenceBands: summary(bands),
 };
 console.log(JSON.stringify(results, null, 2));
-fs.writeFileSync("ml/results.json", JSON.stringify(results, null, 2));
+if (OUT === "public/model") fs.writeFileSync("ml/results.json", JSON.stringify(results, null, 2));
 
 // Glue MobileNet and our head into one model so the browser loads a single file.
 // tfjs-node is not needed: we take the model files from a custom save handler and write them ourselves.

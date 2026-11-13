@@ -1,13 +1,13 @@
 {
   "mobilenet": "v1 1.0",
-  "trainPhotos": 2177,
+  "trainPhotos": 2467,
   "testPhotos": 547,
-  "testAccuracy": 0.841,
+  "testAccuracy": 0.857,
   "perClassRecall": {
-    "PET": 0.75,
-    "HDPE": 0.8,
-    "PP": 0.8,
-    "LDPE": 0.89,
+    "PET": 0.81,
+    "HDPE": 0.75,
+    "PP": 0.87,
+    "LDPE": 0.87,
     "UNCLEAR": 0.9
   },
   "confusion": {
@@ -20,38 +20,38 @@
     ],
     "matrix": [
       [
-        64,
-        4,
+        69,
+        6,
         2,
-        8,
-        7
-      ],
-      [
-        4,
-        45,
-        1,
-        4,
-        2
-      ],
-      [
         5,
-        4,
-        113,
-        8,
-        11
-      ],
-      [
-        3,
-        0,
-        3,
-        73,
         3
       ],
       [
         5,
-        1,
-        9,
+        42,
+        4,
+        4,
+        1
+      ],
+      [
+        6,
         3,
+        122,
+        3,
+        7
+      ],
+      [
+        3,
+        0,
+        4,
+        71,
+        4
+      ],
+      [
+        7,
+        1,
+        8,
+        2,
         165
       ]
     ]
@@ -59,15 +59,15 @@
   "byPhotoKind": {
     "symbol": {
       "photos": 134,
-      "accuracy": 0.69
+      "accuracy": 0.67
     },
     "wholeItem": {
       "photos": 280,
-      "accuracy": 0.86
+      "accuracy": 0.89
     },
     "wrapperOrFoil": {
       "photos": 37,
-      "accuracy": 0.81
+      "accuracy": 0.89
     },
     "room": {
       "photos": 96,
@@ -76,16 +76,16 @@
   },
   "confidenceBands": {
     "high": {
-      "photos": 492,
-      "accuracy": 0.88
+      "photos": 501,
+      "accuracy": 0.9
     },
     "mid": {
-      "photos": 34,
-      "accuracy": 0.5
+      "photos": 31,
+      "accuracy": 0.58
     },
     "low": {
-      "photos": 21,
-      "accuracy": 0.48
+      "photos": 15,
+      "accuracy": 0.13
     }
   }
 }

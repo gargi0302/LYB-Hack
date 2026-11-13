@@ -223,23 +223,26 @@ npm run train   # trains, prints test results, writes public/model/ and ml/resul
 | [TrashBusters/combined](https://huggingface.co/datasets/TrashBusters/combined) | MIT | 1,400 whole-item photos: water and soda bottles → PET, detergent bottles → HDPE, food containers and household tubs/boxes → PP, carry and bin bags → LDPE, glass bottles, cans, paper and styrofoam cups, boxes → UNCLEAR |
 | [TACO](http://tacodataset.org) ([mirror](https://huggingface.co/datasets/RandyHuynh5815/TACO-Waste-Recognition)) | CC BY 4.0 | 170 wrapper and crisp-packet crops (litter photographed where it lay) → PP, 16 aluminium foil crops → UNCLEAR |
 | [MIT Indoor 67](https://huggingface.co/datasets/Voxel51/IndoorSceneRecognition) | MIT | 240 offices, meeting rooms, classrooms, homes, whole and zoomed in (480 photos) → UNCLEAR, so a room or a person isn't read as plastic |
+| Our own photos (not published, they show people) | ours | 8 photos of the demo items, on a table and in a hand: Dairy Milk and Dark Fantasy wrappers → PP, Bisleri bottle → PET, Bisleri cap → HDPE. `ml/own.mjs` cuts 200 item crops (sizes, positions, turned, lighter/darker) and 90 background crops (face, shirt, sofa, wall) → UNCLEAR. Training only, never in the test set |
 
 The 4 sample photos in `public/samples/` (to upload during the demo) come from TrashBusters and were held out of training. With the current model they come out as PET, HDPE, PP and not plastic, all above 98%.
 
-Training also uses a black-and-white copy of every photo, so the model can't rely on colour alone (many LDPE photos are black bin bags).
+Training also uses a black-and-white copy of every photo, so the model can't rely on colour alone (many LDPE photos are black bin bags), and a mirrored, zoomed-in copy, so a new angle or framing isn't new to it.
 
-**Results** on 547 test photos the model never saw (every 5th photo of each class is held out):
+**Results** on 547 test photos the model never saw (every 5th photo of each class is held out; a room and its zoomed-in copy stay on the same side):
 
 | | |
 |---|---|
-| Overall accuracy | 84.1% (before adding wrappers and rooms: 82.4% on 414 photos) |
-| Whole items / wrappers and foil / symbol close-ups / rooms | 86% / 81% / 69% / 100% |
-| PET / HDPE / PP / LDPE / UNCLEAR recall | 75% / 80% / 80% / 89% / 90% |
-| Confidence ≥ 85% (492 of 547 photos) | right 88% of the time |
-| Confidence 60–85% (34 photos) | right 50% of the time |
-| Confidence < 60% (21 photos) | right 48% of the time |
+| Overall accuracy | 85.7% (87.9% without our own photos, which tilt it towards the demo items; 82.4% before wrappers and rooms) |
+| Whole items / wrappers and foil / symbol close-ups / rooms | 89% / 89% / 67% / 100% |
+| PET / HDPE / PP / LDPE / UNCLEAR recall | 81% / 75% / 87% / 87% / 90% |
+| Confidence ≥ 85% (501 of 547 photos) | right 90% of the time |
+| Confidence 60–85% (31 photos) | right 58% of the time |
+| Confidence < 60% (15 photos) | right 13% of the time |
 
-The rooms score is flattering: the whole and zoomed copy of one room can fall on both sides of the split.
+**The demo items**, whole photo as the app sees it: Dairy Milk and Dark Fantasy on a table and in a hand → PP 100%; Bisleri bottle on a table and in a hand → PET 100%; Bisleri cap on a table → HDPE 100%, but a blurry cap held in a hand → PET (wrong). Two photos kept out of training: Dairy Milk held by someone else → PP 96%, the back of a Dark Fantasy wrapper → PP 98%.
+
+The rooms score is high because rooms look nothing like the waste photos.
 
 This is why, per item, the app fills in the type at ≥ 60% (marked "please check" below 85%), and below 60% asks the user what the item is and which category, and flags the batch "check at pickup". The numbers vary by a few points between training runs because the test set is small.
 

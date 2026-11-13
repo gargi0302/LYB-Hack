@@ -7,5 +7,5 @@
     "UNCLEAR"
   ],
   "imageSize": 224,
-  "testAccuracy": 0.841
+  "testAccuracy": 0.857
 }
