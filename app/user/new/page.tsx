@@ -35,6 +35,15 @@ const unsure = (it: Item) => !!it.guess && band(it.guess.confidence) === "manual
 const aiType = (it: Item) => it.guess?.type ?? it.suggested; // what the AI said, from either model
 const fromChat = (it: Item) => it.src === "chat";
 
+// Basellion eats (or spits out) a picture of the item. Items from the chat have no photo, so they get
+// a small tile with their plastic code instead: dark green for recyclable, pale with a cross if not.
+function tile(type: Plastic) {
+  const bad = type === "UNCLEAR";
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 56 56"><rect width="56" height="56" rx="12" fill="${bad ? "#dae1c6" : "#31572c"}"/>`
+    + `<text x="28" y="35" font-family="Arial,sans-serif" font-size="${bad ? 26 : 15}" font-weight="700" text-anchor="middle" fill="${bad ? "#31572c" : "#ecf39e"}">${bad ? "✕" : type}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
 export default function FeedBasellion() {
   const profile = useProfile("generator");
   const router = useRouter();
@@ -48,6 +57,8 @@ export default function FeedBasellion() {
   const [addressId, setAddressId] = useState("");
   const [eating, setEating] = useState(false);
   const [batch, setBatch] = useState<Batch | null>(null);
+  // a short eat or spit when chat items are added (photo items are eaten when the listing is sent)
+  const [snack, setSnack] = useState<{ mood: Mood; item: string } | null>(null);
   // how big and happy Basellion is now, and a little more once it has eaten this listing (lib/growth.ts)
   const [earlier, , , loadedAt] = useBatches(profile);
   const month = fedThisMonth(earlier, loadedAt);
@@ -111,8 +122,16 @@ export default function FeedBasellion() {
     const stamp = Date.now();
     setItems((list) => [...list, ...suggested.map((s, i) => {
       const plastic: Plastic = s.plastic === "NOT_RECYCLABLE" ? "UNCLEAR" : s.plastic;
-      return { key: `chat#${stamp}#${i}`, src: "chat", crop: "", name: s.name, count: Math.max(1, s.count), type: plastic, suggested: plastic, sure: s.sure, grams: s.grams_each };
+      return { key: `chat#${stamp}#${i}`, src: "chat", crop: tile(plastic), name: s.name, count: Math.max(1, s.count), type: plastic, suggested: plastic, sure: s.sure, grams: s.grams_each };
     })]);
+    // Basellion eats what can be recycled, then spits out what can't
+    const good = suggested.find((s) => s.plastic !== "NOT_RECYCLABLE");
+    const bad = suggested.find((s) => s.plastic === "NOT_RECYCLABLE");
+    const steps: { mood: Mood; item: string }[] = [];
+    if (good) steps.push({ mood: "eating", item: tile(good.plastic as Plastic) });
+    if (bad) steps.push({ mood: "spitting", item: tile("UNCLEAR") });
+    steps.forEach((step, i) => setTimeout(() => setSnack(step), i * 1300));
+    setTimeout(() => setSnack(null), steps.length * 1300);
   }
 
   // the user picked a different type than the AI: save it so the AI learns (lib/memory.ts)
@@ -138,7 +157,7 @@ export default function FeedBasellion() {
   const main = [...types].sort((a, b) => howMany(b) - howMany(a))[0]; // the listing's headline type
   const estimatedGrams = recyclable.reduce((sum, it) => sum + (it.grams ?? 0) * it.count, 0); // from the chat only
   const allNotPlastic = !checking && ordered.length > 0 && ordered.every((it) => it.type === "UNCLEAR");
-  const lastItem = ordered.at(-1);
+  const lastItem = items.at(-1); // the newest item (chat items are listed after photos, but may be older)
   const reused = photos.some((p) => p.reused);
   const ready = !checking && recyclable.length > 0 && missing.length === 0;
   const address = addresses.find((a) => a.id === addressId);
@@ -214,6 +233,7 @@ export default function FeedBasellion() {
   let item = recyclable.find((it) => it.crop)?.crop || photos[0]?.src;
   if (batch) [mood, message] = ["happy", t("m.done")];
   else if (eating) [mood, message] = ["eating", undefined];
+  else if (snack) [mood, message, item] = [snack.mood, snack.mood === "eating" ? t("m.eating") : t("m.spitting"), snack.item];
   else if (checking) [mood, message] = ["thinking", undefined];
   else if (allNotPlastic) [mood, message, item] = ["spitting", t("m.allNot"), lastItem!.crop];
   else if (missing.length) [mood, message] = ["thinking", t("m.missing", { n: number(missing[0].key) })];
