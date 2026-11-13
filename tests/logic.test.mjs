@@ -5,6 +5,8 @@ import { distanceKm, topMatches } from "../lib/match.ts";
 import { band, estimateValue, hintFor } from "../lib/plastics.ts";
 import { openSlots, slotLabel } from "../lib/slots.ts";
 import { fedThisMonth, greenness, growth } from "../lib/growth.ts";
+import { recall, SAME_ITEM } from "../lib/memory.ts";
+import { partsOf } from "../lib/objects.ts";
 
 test("haversine distance is about right", () => {
   const mumbai = { lat: 19.076, lng: 72.8777 };
@@ -107,4 +109,30 @@ test("Basellion's world turns greener with recycling: pale for a new user, full 
   assert.ok(greenness(160, 5) < greenness(160, 6));
   assert.equal(greenness(500, 0), 1);
   assert.equal(greenness(2000, 50), 1);
+});
+
+// unit vectors: "angle" picks how alike two of them are (cosine)
+const vec = (angle) => [Math.cos(angle), Math.sin(angle)];
+
+test("a correction is recalled only for a photo that looks almost the same", () => {
+  const taught = [{ type: "PP", embedding: vec(0) }];
+  assert.equal(recall(taught, vec(0.1))?.type, "PP"); // cos 0.995
+  assert.equal(recall(taught, vec(Math.acos(SAME_ITEM) + 0.05)), null); // just below the line
+  assert.equal(recall([], vec(0)), null);
+});
+
+test("several corrections vote, and a tie changes nothing", () => {
+  const honest = [{ type: "PP", name: "Dark Fantasy wrapper", embedding: vec(0) }, { type: "PP", embedding: vec(0.05) }];
+  const prank = { type: "PET", embedding: vec(0.01) };
+  assert.deepEqual({ ...recall([...honest, prank], vec(0.02)), similarity: 0 }, { type: "PP", name: "Dark Fantasy wrapper", votes: 2, similarity: 0 });
+  assert.equal(recall([honest[0], prank], vec(0.02)), null);
+});
+
+test("held-item parts cover the whole photo and stay inside it", () => {
+  for (const aspect of [16 / 9, 3 / 4, 1]) {
+    const parts = partsOf(aspect);
+    assert.ok(parts.every((b) => b.x >= 0 && b.y >= 0 && b.x + b.w <= 1.0001 && b.y + b.h <= 1.0001));
+    assert.ok(parts.some((b) => b.x === 0 && b.y === 0) && parts.some((b) => Math.abs(b.x + b.w - 1) < 1e-9 && Math.abs(b.y + b.h - 1) < 1e-9));
+    assert.ok(parts.length <= 40);
+  }
 });

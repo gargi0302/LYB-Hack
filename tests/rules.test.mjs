@@ -146,3 +146,17 @@ test("demo reset puts the demo data back", async () => {
   const { db } = await login("user");
   assert.ifError((await db.rpc("reset_demo")).error);
 });
+
+test("corrections: everyone reads fingerprints, nobody reads others' photos", async () => {
+  const { db } = await login("user");
+  const embedding = Array.from({ length: 1024 }, (_, i) => (i === 0 ? 1 : 0));
+  assert.ifError((await db.from("corrections").insert({ ai_type: "LDPE", type: "PP", embedding, photo: "data:image/jpeg;base64,AA==" })).error);
+  // the same type as the AI is not a correction
+  assert.ok((await db.from("corrections").insert({ ai_type: "PP", type: "PP", embedding })).error);
+  const { db: other } = await login("collector");
+  assert.ok((await other.from("corrections").select("type, embedding")).data.length > 0);
+  assert.ok((await other.from("corrections").select("photo")).error);
+  assert.ok((await other.from("corrections").select("user_id")).error);
+  const anon = createClient(url, key, { auth: { persistSession: false } });
+  assert.ok((await anon.from("corrections").select("type")).error);
+});

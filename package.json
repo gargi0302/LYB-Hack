@@ -10,7 +10,8 @@
     "test": "node --env-file=.env.local --test tests/*.test.mjs",
     "train": "node ml/train.mjs",
     "reset-db": "supabase db reset",
-    "data": "node ml/download.mjs"
+    "data": "node ml/download.mjs",
+    "corrections": "node --env-file=.env.local ml/corrections.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.119.0",

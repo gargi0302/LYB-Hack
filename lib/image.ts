@@ -36,3 +36,11 @@ export function photoHash(pic: Picture) {
   const bits = grey.map((g) => (g > avg ? "1" : "0")).join("");
   return BigInt("0b" + bits).toString(16).padStart(16, "0");
 }
+
+// A small JPEG of what the model looked at (centre square, 224 px), to send with a correction
+export async function smallJpeg(src: string) {
+  const img = new Image();
+  img.src = src;
+  await img.decode();
+  return squareCanvas(img, 224).toDataURL("image/jpeg", 0.85);
+}

@@ -2,7 +2,7 @@
 
 LYB Mumbai Hackathon 2026, Problem Statement 1.
 
-**Live:** https://circular-plastics.vercel.app (Vercel + Supabase cloud in Mumbai; demo accounts below, password `demo1234`)
+**Live:** https://lyb-hack.vercel.app (Vercel + Supabase cloud; demo accounts below, password `demo1234`)
 
 A mobile-first web app that connects households, societies, campuses and small businesses with collectors and recyclers. Users "feed" Basellion, a recycling monster: they photograph the item, the AI reads the plastic type, and Basellion eats recyclable plastic or spits out what can't be recycled. The user then books a nearby collector (within 5 km) for a time slot the collector confirms, follows the pickup like a parcel (requested → confirmed → on the way → picked up), and earns coins. A QR label carries the chain of custody all the way to the recycler.
 
@@ -213,7 +213,7 @@ npm run data    # downloads the photos into ml/data/ (not committed)
 npm run train   # trains, prints test results, writes public/model/ and ml/results.json
 ```
 
-**Data** (both openly licensed):
+**Data** (all openly licensed):
 
 | Source | Licence | Used for |
 |---|---|---|
@@ -221,25 +221,39 @@ npm run train   # trains, prints test results, writes public/model/ and ml/resul
 | [viola77data/recycling-dataset](https://huggingface.co/datasets/viola77data/recycling-dataset) | Apache-2.0 | 100 glass, aluminium, cardboard and paper photos for UNCLEAR |
 | [COCO-SSD](https://github.com/tensorflow/tfjs-models/tree/master/coco-ssd) | Apache-2.0 | ready-made object detector (not trained by us), used to find items and skip people and furniture |
 | [TrashBusters/combined](https://huggingface.co/datasets/TrashBusters/combined) | MIT | 1,400 whole-item photos: water and soda bottles → PET, detergent bottles → HDPE, food containers and household tubs/boxes → PP, carry and bin bags → LDPE, glass bottles, cans, paper and styrofoam cups, boxes → UNCLEAR |
+| [TACO](http://tacodataset.org) ([mirror](https://huggingface.co/datasets/RandyHuynh5815/TACO-Waste-Recognition)) | CC BY 4.0 | 170 wrapper and crisp-packet crops (litter photographed where it lay) → PP, 16 aluminium foil crops → UNCLEAR |
+| [MIT Indoor 67](https://huggingface.co/datasets/Voxel51/IndoorSceneRecognition) | MIT | 240 offices, meeting rooms, classrooms, homes, whole and zoomed in (480 photos) → UNCLEAR, so a room or a person isn't read as plastic |
 
 The 4 sample photos in `public/samples/` (to upload during the demo) come from TrashBusters and were held out of training. With the current model they come out as PET, HDPE, PP and not plastic, all above 98%.
 
 Training also uses a black-and-white copy of every photo, so the model can't rely on colour alone (many LDPE photos are black bin bags).
 
-**Results** on 414 test photos the model never saw (every 5th photo of each class is held out):
+**Results** on 547 test photos the model never saw (every 5th photo of each class is held out):
 
 | | |
 |---|---|
-| Overall accuracy | 82.4% |
-| Whole-item photos / symbol close-ups | 86% / 75% |
-| PET / HDPE / PP / LDPE / UNCLEAR recall | 79% / 79% / 89% / 78% / 85% |
-| Confidence ≥ 85% (360 of 414 photos) | right 89% of the time |
-| Confidence 60–85% (32 photos) | right 38% of the time |
-| Confidence < 60% (22 photos) | right 32% of the time |
+| Overall accuracy | 84.1% (before adding wrappers and rooms: 82.4% on 414 photos) |
+| Whole items / wrappers and foil / symbol close-ups / rooms | 86% / 81% / 69% / 100% |
+| PET / HDPE / PP / LDPE / UNCLEAR recall | 75% / 80% / 80% / 89% / 90% |
+| Confidence ≥ 85% (492 of 547 photos) | right 88% of the time |
+| Confidence 60–85% (34 photos) | right 50% of the time |
+| Confidence < 60% (21 photos) | right 48% of the time |
+
+The rooms score is flattering: the whole and zoomed copy of one room can fall on both sides of the split.
 
 This is why, per item, the app fills in the type at ≥ 60% (marked "please check" below 85%), and below 60% asks the user what the item is and which category, and flags the batch "check at pickup". The numbers vary by a few points between training runs because the test set is small.
 
-**Known weak spots:** a black tiffin held in a hand was read as HDPE or "not plastic", and a PP biscuit wrapper as LDPE. Film wrappers in PP and LDPE look almost the same in a photo; the printed code (or a person) is the reliable signal, which is why the name box, hints and "Not right?" exist. Symbol close-ups (75%) are weaker than whole items. Most whole-item photos are product shots on plain backgrounds, not Indian household waste. Judging the resin from the object is a rule of thumb: some detergent bottles are PP, some food tubs are PET. Some glass bottles are still read as PET, so the collector's check at pickup matters. Next step: add our own phone photos of Indian packaging (milk pouches, shampoo bottles, food tubs), and retrain on the corrections the app collects.
+**Known weak spots:** a black tiffin held in a hand was read as HDPE or "not plastic". A Dark Fantasy wrapper (PP) was read as LDPE; with the TACO wrappers it is now PP at 68%. A Dairy Milk wrapper held up in an office still comes out "not plastic", and a dark shirt can look like LDPE film, so for items held in a hand only taught items are searched for (see below). Film wrappers in PP and LDPE look almost the same in a photo; the printed code (or a person) is the reliable signal, which is why the name box, hints and "Not right?" exist. Symbol close-ups (75%) are weaker than whole items. Most whole-item photos are product shots on plain backgrounds, not Indian household waste. Judging the resin from the object is a rule of thumb: some detergent bottles are PP, some food tubs are PET. Some glass bottles are still read as PET, so the collector's check at pickup matters. Next step: add our own phone photos of Indian packaging (milk pouches, shampoo bottles, food tubs), and retrain on the corrections the app collects.
+
+### Teach Basellion (users correct the AI)
+
+When a user changes the AI's answer, or names an item ("Dark Fantasy wrapper"), a box asks **"Teach Basellion that this is PP?"**:
+
+1. **Learns at once, for everyone.** The app saves the photo's *embedding*: the 1,024 numbers the model computes for the photo before deciding, scaled to length 1 (`lib/classify.ts`). A later photo whose embedding is at least 0.75 alike (cosine) is given the taught type and name, shown as "learned from people's corrections (n)" (`lib/memory.ts`). The line was measured: a photo against cropped, turned, darker and blurred copies of itself scored 0.72–0.89, the most alike *different* training photo at most 0.68.
+2. **Held items.** When the detector sees only a person, the app checks about 30 overlapping parts of the photo and keeps the part that matches a taught item (`lib/detect.ts`).
+3. **Retraining.** The correction also keeps a 224 px crop. `npm run corrections` (needs the service key) copies them into `ml/data/<type>/`, then `npm run train` learns from them.
+
+Safeguards: several corrections vote, so one wrong or mischievous one can't override others, and a tie changes nothing; 30 corrections per account a day; other users can read only the embeddings, types and names, never the photos or who sent them (column grants in `supabase/migrations/20261113000000_corrections.sql`). The team can add example photos of known items too (no user, no AI answer), for instance the items used in the demo.
 
 ## Where AI is used, and where it is not
 
@@ -258,7 +272,7 @@ This is why, per item, the app fills in the type at ≥ 60% (marked "please chec
 
 **Ask Basellion is a suggestion, not a fact:** the model's counts are "typical pack" guesses (packs differ by size and brand), so every item stays editable, unsure ones are marked "check the pack", and the batch is flagged "check at pickup". The printed code beats the model.
 
-**Privacy:** a PIN code typed at sign-up is sent to India Post's PIN API, and the chosen area, city and state to OpenStreetMap to place it on the map (no names, phones or street lines). Only the text the user types in Ask Basellion is sent to OpenAI (never their name, phone or address), and only for logged-in users. Photos stay on the phone, addresses are hidden until a pickup is accepted, the QR page shows no names, and all data is fictional.
+**Privacy:** a PIN code typed at sign-up is sent to India Post's PIN API, and the chosen area, city and state to OpenStreetMap to place it on the map (no names, phones or street lines). Only the text the user types in Ask Basellion is sent to OpenAI (never their name, phone or address), and only for logged-in users. Photos stay on the phone unless the user presses "Teach Basellion" (then a small crop of that one item is saved, as the button says), addresses are hidden until a pickup is accepted, the QR page shows no names, and all data is fictional.
 
 ## Assumptions
 
@@ -282,10 +296,10 @@ This is why, per item, the app fills in the type at ≥ 60% (marked "please chec
 ## Tests
 
 ```bash
-npm test     # 20 checks. The rule tests need the local database running.
+npm test     # 26 checks. The rule tests need the local database running.
 ```
 
-- `tests/logic.test.mjs`: distance, matching order, reasons and the 5 km limit, confidence bands, name hints ("Dark Fantasy wrapper" → PP), value estimate, time slots, Basellion's growth stages and "fed this month"
+- `tests/logic.test.mjs`: distance, matching order, reasons and the 5 km limit, confidence bands, name hints ("Dark Fantasy wrapper" → PP), value estimate, time slots, Basellion's growth stages and "fed this month", recalling corrections (the 0.75 line, voting, ties) and the held-item search parts
 - `tests/rules.test.mjs`: logs in as each role and checks:
   - users see only their own batches
   - a collector can turn down a slot
@@ -299,12 +313,13 @@ npm test     # 20 checks. The rule tests need the local database running.
   - a photo fingerprint is found again in any listing
   - a listing's items follow its privacy (others can't add or read them)
   - the reset works
+  - corrections: everyone reads embeddings, nobody reads another person's photo or id, the AI's own answer without a name is refused
 
 ## Next steps
 
 - **A detector trained on waste.** COCO-SSD knows bottles, cups and bowls, but not tiffins, wrappers or pouches (it called a round tiffin lid a "toilet"). Next: fine-tune a small detector on photos of litter with a box drawn around each item (for example the TACO dataset plus our own labelled photos), so any waste item is found on any background and outlined in its plastic type's colour (PET blue, HDPE orange, PP green, LDPE yellow).
 - **Reading the printed code.** Text recognition (OCR) on the photo to read "PP", "PET", "HDPE", "LDPE" or the number in the triangle, which would settle cases like PP wrappers that look like LDPE film.
-- More of our own photos of Indian packaging, and retraining on the corrections the app already stores.
+- More of our own photos of Indian packaging, and retraining on the corrections the app already stores (`npm run corrections`).
 - A rewards screen for spending coins.
 
 ## Credits and declarations

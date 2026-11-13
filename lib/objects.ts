@@ -61,3 +61,19 @@ export function findItems(img: HTMLImageElement): Box[] {
   if (boxes.length < 2 || boxes.length > 8 || boxes.some((b) => b.w * b.h > 0.7)) return [];
   return boxes.sort((a, b) => a.x + a.w / 2 - (b.x + b.w / 2)).map(({ x, y, w, h }) => ({ x, y, w, h }));
 }
+
+// Overlapping square parts of a photo, half and three quarters of its short side, each overlapping
+// its neighbour by half. Used to find an item held up to the camera (lib/detect.ts findHeldItem).
+export function partsOf(aspect: number): Box[] {
+  const boxes: Box[] = [];
+  for (const size of [0.5, 0.75]) {
+    const w = aspect >= 1 ? size / aspect : size;
+    const h = aspect >= 1 ? size : size * aspect;
+    const across = Math.ceil((1 - w) / (w / 2)) + 1;
+    const down = Math.ceil((1 - h) / (h / 2)) + 1;
+    for (let i = 0; i < across; i++) {
+      for (let j = 0; j < down; j++) boxes.push({ x: ((1 - w) * i) / (across - 1), y: ((1 - h) * j) / (down - 1), w, h });
+    }
+  }
+  return boxes;
+}

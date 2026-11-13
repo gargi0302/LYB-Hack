@@ -46,7 +46,8 @@ async function features(set, versions) {
   for (const { file, y } of set) {
     for (const grey of versions) {
       const img = await loadImage(file, grey);
-      out.push(base.predict(img.expandDims()));
+      // averaged right away (1024 numbers a photo): the full 7x7 maps of every photo don't fit in memory
+      out.push(tf.tidy(() => base.predict(img.expandDims()).mean([1, 2])));
       ys.push(y);
       img.dispose();
     }
@@ -56,11 +57,10 @@ async function features(set, versions) {
 const trainData = await features(train, [false, true]);
 const testData = await features(test, [false]);
 
-// the only part we train: average the feature map, one hidden layer, then 5 outputs
+// the only part we train: one hidden layer on the averaged features, then 5 outputs
 const head = tf.sequential({
   layers: [
-    tf.layers.globalAveragePooling2d({ inputShape: cut.outputShape.slice(1) }),
-    tf.layers.dropout({ rate: 0.3 }),
+    tf.layers.dropout({ rate: 0.3, inputShape: [cut.outputShape[3]] }),
     tf.layers.dense({ units: 100, activation: "relu" }),
     tf.layers.dense({ units: LABELS.length, activation: "softmax" }),
   ],
@@ -76,12 +76,14 @@ const probs = await head.predict(testData.x).array();
 const truth = test.map((s) => s.y);
 const confusion = LABELS.map(() => LABELS.map(() => 0));
 const bands = { high: [0, 0], mid: [0, 0], low: [0, 0] }; // [right, total]
-const kinds = { symbol: [0, 0], wholeItem: [0, 0] }; // close-up of the symbol vs photo of the whole item
+// close-up of the symbol, photo of a whole item, a wrapper or foil from TACO, a room
+const kinds = { symbol: [0, 0], wholeItem: [0, 0], wrapperOrFoil: [0, 0], room: [0, 0] };
+const kindOf = (file) => ({ tb: "wholeItem", taco: "wrapperOrFoil", room: "room" })[path.basename(file).split("_")[0]] ?? "symbol";
 probs.forEach((p, i) => {
   const guess = p.indexOf(Math.max(...p));
   confusion[truth[i]][guess]++;
   const band = p[guess] >= 0.85 ? "high" : p[guess] >= 0.6 ? "mid" : "low";
-  const kind = path.basename(test[i].file).startsWith("tb_") ? "wholeItem" : "symbol";
+  const kind = kindOf(test[i].file);
   for (const tally of [bands[band], kinds[kind]]) {
     tally[0] += guess === truth[i];
     tally[1]++;
@@ -104,7 +106,8 @@ fs.writeFileSync("ml/results.json", JSON.stringify(results, null, 2));
 
 // Glue MobileNet and our head into one model so the browser loads a single file.
 // tfjs-node is not needed: we take the model files from a custom save handler and write them ourselves.
-const full = tf.model({ inputs: base.inputs, outputs: head.apply(base.outputs[0]) });
+const pooled = tf.layers.globalAveragePooling2d({}).apply(base.outputs[0]);
+const full = tf.model({ inputs: base.inputs, outputs: head.apply(pooled) });
 fs.mkdirSync(OUT, { recursive: true });
 await full.save(tf.io.withSaveHandler(async (art) => {
   fs.writeFileSync(path.join(OUT, "weights.bin"), Buffer.from(art.weightData));

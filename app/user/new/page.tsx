@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Camera as CameraIcon, Check, ImagePlus, MessageCircle, X } from "lucide-react";
+import { Camera as CameraIcon, Check, GraduationCap, ImagePlus, MessageCircle, X } from "lucide-react";
 import Shell from "@/components/Shell";
 import Camera from "@/components/Camera";
 import Monster, { type Mood } from "@/components/Monster";
@@ -13,10 +13,11 @@ import { fedThisMonth, greenness, growth, STAGES } from "@/lib/growth";
 import { Hills, worldStyle } from "@/components/World";
 import { addressText } from "@/lib/areas";
 import { supabase, type Address, type Batch, type Plastic } from "@/lib/supabase";
-import { classify, type Guess } from "@/lib/classify";
-import { cropCanvas, photoHash } from "@/lib/image";
+import { classifyMany, type Guess } from "@/lib/classify";
+import { cropCanvas, photoHash, smallJpeg } from "@/lib/image";
 import { findItems, type Box } from "@/lib/objects";
-import { findObjects } from "@/lib/detect";
+import { findHeldItem, findObjects } from "@/lib/detect";
+import { teach, withCorrections } from "@/lib/teach";
 import { band, hintFor, PLASTICS, TIP_COUNT, TYPICAL_GRAMS } from "@/lib/plastics";
 import { useLang, type Key } from "@/lib/i18n";
 
@@ -26,6 +27,7 @@ type Photo = { src: string; boxes: Box[] | null; hash?: string; reused?: boolean
 type Item = {
   key: string; src: string; crop: string; name: string; type: Plastic | ""; count: number; naming?: boolean;
   guess?: Guess; suggested?: Plastic; sure?: boolean; grams?: number;
+  teaching?: "sending" | "failed"; taught?: Plastic; // "Teach Basellion" for this item
 };
 const wait = (ms: number) => new Promise((done) => setTimeout(done, ms));
 const pct = (n: number) => `${Math.round(n * 100)}%`;
@@ -37,6 +39,7 @@ export default function FeedBasellion() {
   const profile = useProfile("generator");
   const router = useRouter();
   const { t } = useLang();
+  const typeName = (p: Plastic) => (p === "UNCLEAR" ? t("feed.notPlastic") : p);
   const [photos, setPhotos] = useState<Photo[]>([]);
   const [items, setItems] = useState<Item[]>([]);
   const [camera, setCamera] = useState(false);
@@ -77,6 +80,7 @@ export default function FeedBasellion() {
       const found = await findObjects(img);
       boxes = found.boxes;
       inHand = found.person && !boxes.length; // only a person/hand found: the item is probably being held
+      if (inHand) boxes = await findHeldItem(img); // then look for the part of the photo that is plastic
     }
     const hash = photoHash(img);
     const { data: reused } = await supabase.rpc("photo_used", { hash });
@@ -87,10 +91,11 @@ export default function FeedBasellion() {
       key: `${src}#${i}`, src, name: "", type: "" as const, count: 1,
       crop: part instanceof HTMLCanvasElement ? part.toDataURL("image/jpeg", 0.8) : src,
     }))]);
-    for (const [i, part] of parts.entries()) {
-      const guess = await classify(part);
+    const guesses = await classifyMany(parts);
+    for (const [i, found] of guesses.entries()) {
+      const guess = await withCorrections(found); // a photo like one people corrected gets their answer
       // a fairly sure answer is filled in (the user can change it); an unsure one the user names and picks
-      update(`${src}#${i}`, { guess, type: band(guess.confidence) === "manual" ? "" : guess.type });
+      update(`${src}#${i}`, { guess, name: guess.name ?? "", type: band(guess.confidence) === "manual" ? "" : guess.type });
     }
   }
 
@@ -101,6 +106,13 @@ export default function FeedBasellion() {
       const plastic: Plastic = s.plastic === "NOT_RECYCLABLE" ? "UNCLEAR" : s.plastic;
       return { key: `chat#${stamp}#${i}`, src: "chat", crop: "", name: s.name, count: Math.max(1, s.count), type: plastic, suggested: plastic, sure: s.sure, grams: s.grams_each };
     })]);
+  }
+
+  // the user picked a different type than the AI: save it so the AI learns (lib/memory.ts)
+  async function teachItem(it: Item) {
+    update(it.key, { teaching: "sending" });
+    const error = await teach(it.guess!, it.type as Plastic, await smallJpeg(it.crop), it.name.trim());
+    update(it.key, error ? { teaching: "failed" } : { teaching: undefined, taught: it.type as Plastic });
   }
 
   function removePhoto(src: string) {
@@ -311,7 +323,8 @@ export default function FeedBasellion() {
                           {g && unsure(it) && <span className="font-medium text-brand-800">{t("feed.cant")}</span>}
                           {g && !unsure(it) && g.type === "UNCLEAR" && `AI: ${t("feed.notPlastic")} · ${pct(g.confidence)}`}
                           {g && !unsure(it) && g.type !== "UNCLEAR" && (
-                            <>AI: <b>{g.type}</b> · {pct(g.confidence)}{band(g.confidence) === "confirm" && ` · ${t("feed.check")}`}</>
+                            <>AI: <b>{g.type}</b>{g.name && <> · <b>{g.name}</b></>} · {g.learned ? t("teach.learned", { n: g.learned }) : pct(g.confidence)}
+                              {!g.learned && band(g.confidence) === "confirm" && ` · ${t("feed.check")}`}</>
                           )}
                         </p>
                         {(g || fromChat(it)) && (
@@ -343,6 +356,23 @@ export default function FeedBasellion() {
                             {PLASTICS.map((p) => <option key={p} value={p}>{p}: {t(`desc.${p}`).split(" · ")[1]}</option>)}
                             <option value="UNCLEAR">{t("feed.leaveOut")}</option>
                           </select>
+                        )}
+                        {g && it.type && (it.type !== g.type || (it.name.trim() && it.name.trim() !== g.name)) && (
+                          <div className="rounded-lg bg-brand-50 p-3 text-sm text-brand-900">
+                            {it.taught === it.type && !it.teaching ? (
+                              <p role="status" className="font-medium">{t("teach.done", { type: typeName(it.type) })}</p>
+                            ) : (
+                              <>
+                                <p>{it.type !== g.type ? t("teach.ask", { ai: typeName(g.type), type: typeName(it.type) })
+                                  : t("teach.askName", { name: it.name.trim(), type: typeName(it.type) })}</p>
+                                <button onClick={() => teachItem(it)} disabled={it.teaching === "sending"} className="btn-secondary mt-2 py-1.5 text-sm">
+                                  <GraduationCap size={16} /> {t("teach.button")}
+                                </button>
+                                <p className="mt-1 text-xs text-stone-500">{t("teach.note")}</p>
+                                {it.teaching === "failed" && <p role="alert" className="mt-1 text-red-700">{t("teach.failed")}</p>}
+                              </>
+                            )}
+                          </div>
                         )}
                       </div>
                     </li>
