@@ -30,6 +30,9 @@ export default function Tracker({ batch, events, children }: { batch: Batch; eve
         <Link href={`/batch/${batch.id}`} className="shrink-0 text-sm font-medium text-brand-700 hover:text-brand-950">{t("qrHistory")}</Link>
       </div>
       <ItemsLine batch={batch} />
+      {Number(batch.pickup_fee) > 0 && (
+        <p className="mt-1 text-sm font-medium text-brand-900">{t("card.fee", { fee: batch.pickup_fee!, km: batch.distance_km ?? "" })}</p>
+      )}
       {batch.status === "picked_up" && (
         <p className="coin-pop mt-3 rounded-xl bg-brand-50 px-3 py-2 text-sm font-semibold text-brand-800">
           {t("tr.complete", { coins })}

@@ -160,3 +160,31 @@ test("corrections: everyone reads fingerprints, nobody reads others' photos", as
   const anon = createClient(url, key, { auth: { persistSession: false } });
   assert.ok((await anon.from("corrections").select("type")).error);
 });
+
+test("collectors set their reach and rate; the database works out the pickup charge", async () => {
+  const { db: col, id: colId } = await login("collector");
+  assert.ifError((await col.from("profiles").update({ max_km: 25, fee_per_km: 10, free_slots: ["1-9", "3-16"] }).eq("id", colId)).error);
+  assert.ok((await col.from("profiles").update({ max_km: 500 }).eq("id", colId)).error); // over 50 km is refused
+  const { data: me } = await col.from("profiles").select("lat, lng").eq("id", colId).single();
+
+  // a user lists a batch about 9 km from the collector and asks them
+  const { db } = await login("user");
+  const lat = me.lat + 0.08;
+  const { data: batch, error } = await db.from("batches").insert({
+    area: "Test area", lat, lng: me.lng, final_type: "PET", declared_kg: 1, last_note: "reach test",
+  }).select("id").single();
+  assert.ifError(error);
+  const asked = await db.from("batches").update({ status: "matched", collector_id: colId, scheduled_at: new Date(Date.now() + 86400000).toISOString() })
+    .eq("id", batch.id).select("distance_km, pickup_fee").single();
+  assert.ifError(asked.error);
+  assert.ok(asked.data.distance_km > 8 && asked.data.distance_km < 10);
+  assert.equal(Number(asked.data.pickup_fee), Math.round((asked.data.distance_km - 5) * 10)); // close enough: same formula
+  // the user can't lower the charge
+  const tampered = await db.from("batches").update({ pickup_fee: 0 }).eq("id", batch.id).select("pickup_fee").single();
+  assert.ok(Number(tampered.data.pickup_fee) > 0);
+
+  // back to 5 km: the same pickup is now refused
+  await col.from("profiles").update({ max_km: 5, fee_per_km: 0, free_slots: null }).eq("id", colId);
+  const { data: second } = await db.from("batches").insert({ area: "Test area", lat, lng: me.lng, final_type: "PET", declared_kg: 1, last_note: "reach test" }).select("id").single();
+  assert.ok((await db.from("batches").update({ status: "matched", collector_id: colId, scheduled_at: new Date(Date.now() + 86400000).toISOString() }).eq("id", second.id)).error);
+});

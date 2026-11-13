@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { BarChart3, Factory, House, LayoutDashboard, Leaf, LogOut, Sprout, Truck, UserRound, type LucideIcon } from "lucide-react";
+import { BarChart3, CalendarClock, Factory, House, LayoutDashboard, Leaf, LogOut, Sprout, Truck, UserRound, type LucideIcon } from "lucide-react";
 import Logo, { LogoMark } from "./Logo";
 import { LanguageMenu } from "./LanguageSwitch";
 import { supabase, homeFor, type Profile, type Role } from "@/lib/supabase";
@@ -13,7 +13,8 @@ const NAV: Record<Role, [Key, string, LucideIcon][]> = {
     ["nav.home", "/user", House], ["nav.feed", "/user/new", Leaf], ["nav.waste", "/user/waste", BarChart3],
     ["nav.impact", "/dashboard", Sprout], ["nav.profile", "/user/profile", UserRound],
   ],
-  collector: [["nav.dashboard", "/collector", LayoutDashboard], ["nav.pickups", "/collector/pickups", Truck], ["nav.impact", "/dashboard", Sprout]],
+  collector: [["nav.dashboard", "/collector", LayoutDashboard], ["nav.pickups", "/collector/pickups", Truck],
+    ["nav.availability", "/collector/settings", CalendarClock], ["nav.impact", "/dashboard", Sprout]],
   recycler: [["nav.dashboard", "/recycler", LayoutDashboard], ["nav.incoming", "/recycler/incoming", Factory], ["nav.impact", "/dashboard", Sprout]],
   plantx: [["nav.impact", "/dashboard", Sprout]],
 };

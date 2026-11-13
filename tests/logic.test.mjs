@@ -1,9 +1,10 @@
 // Plain logic checks, no database needed. Node runs the .ts files directly (type stripping).
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { distanceKm, topMatches } from "../lib/match.ts";
-import { band, estimateValue, hintFor } from "../lib/plastics.ts";
-import { openSlots, slotLabel } from "../lib/slots.ts";
+import { distanceKm, pickupFee, topMatches } from "../lib/match.ts";
+import { band, bagRange, CATALOGUE, crossCheck, estimateValue, gramsFor, hintFor, listKg, tally, UNSURE_GRAMS } from "../lib/plastics.ts";
+import { translate } from "../lib/strings.ts";
+import { hoursLabel, openSlots, slotKey, slotLabel } from "../lib/slots.ts";
 import { fedThisMonth, greenness, growth } from "../lib/growth.ts";
 import { recall, SAME_ITEM } from "../lib/memory.ts";
 import { partsOf } from "../lib/objects.ts";
@@ -135,4 +136,92 @@ test("held-item parts cover the whole photo and stay inside it", () => {
     assert.ok(parts.some((b) => b.x === 0 && b.y === 0) && parts.some((b) => Math.abs(b.x + b.w - 1) < 1e-9 && Math.abs(b.y + b.h - 1) < 1e-9));
     assert.ok(parts.length <= 40);
   }
+});
+
+test("the bag catalogue maps everyday items to the usual plastic", () => {
+  const typeOf = Object.fromEntries(CATALOGUE.map((c) => [c.id, c.type]));
+  assert.equal(typeOf.waterBottle, "PET");
+  assert.equal(typeOf.oilBottle, "PET");
+  assert.equal(typeOf.milkPouch, "LDPE");
+  assert.equal(typeOf.carryBag, "LDPE");
+  assert.equal(typeOf.wrapper, "PP");
+  assert.equal(typeOf.takeaway, "PP");
+  assert.equal(typeOf.shampooBottle, "HDPE");
+  assert.equal(typeOf.bucket, "PP");
+  // every item has a positive weight and a name in all three languages
+  for (const c of CATALOGUE) {
+    assert.ok(c.grams > 0);
+    for (const lang of ["en", "hi", "mr"]) assert.ok(translate(lang, `cat.${c.id}`).length > 2);
+  }
+});
+
+test("typed-in items: the name suggests the type, otherwise not sure", () => {
+  for (const name of ["curd cup", "दही का कप", "दह्याचा कप"]) assert.equal(hintFor(name), "PP");
+  assert.equal(hintFor("broken toy"), null);
+  assert.equal(gramsFor("PET"), 25);
+  assert.equal(gramsFor(null), UNSURE_GRAMS);
+});
+
+test("the list's weight and counts leave out what isn't recyclable here", () => {
+  const items = [
+    { type: "PP", count: 12, grams: 5 },     // wrappers: 60 g
+    { type: "LDPE", count: 3, grams: 5 },    // milk pouches: 15 g
+    { type: "PET", count: 5, grams: 25 },    // bottles: 125 g
+    { type: null, count: 2, grams: 20 },     // not sure: 40 g
+    { type: "UNCLEAR", count: 4, grams: 50 }, // glass jars: left out
+  ];
+  assert.equal(listKg(items), 0.2); // 240 g, to one decimal
+  assert.deepEqual(tally(items), { types: [{ type: "PP", count: 12 }, { type: "PET", count: 5 }, { type: "LDPE", count: 3 }], unsure: 2 });
+  assert.equal(listKg([]), 0);
+  assert.equal(listKg([{ type: "LDPE", count: 1, grams: 5 }]), 0.1); // never less than 0.1 kg once listed
+});
+
+test("bag size gives a range, half full is half", () => {
+  assert.deepEqual(bagRange("medium", true), [0.4, 1.2]);
+  assert.deepEqual(bagRange("medium", false), [0.2, 0.6]);
+  const [smallMax, largeMin] = [bagRange("small", true)[1], bagRange("large", true)[0]];
+  assert.ok(smallMax < largeMin);
+});
+
+test("cross-check: only a big gap between list and bag is flagged", () => {
+  const range = bagRange("medium", true); // 0.4 - 1.2 kg
+  assert.equal(crossCheck(0.8, range), "ok");
+  assert.equal(crossCheck(0.25, range), "ok");    // a bit light is fine, both are rough
+  assert.equal(crossCheck(0.1, range), "fewer");  // under half the smallest: items missed?
+  assert.equal(crossCheck(2.0, range), "ok");
+  assert.equal(crossCheck(3.0, range), "more");   // over twice the largest: bag bigger?
+});
+
+test("pickups are free up to 5 km, then the collector's rate per extra km", () => {
+  assert.equal(pickupFee(3, 10), 0);
+  assert.equal(pickupFee(5, 10), 0);
+  assert.equal(pickupFee(8, 10), 30);
+  assert.equal(pickupFee(7.24, 10), 22); // whole rupees
+  assert.equal(pickupFee(20, 0), 0); // a collector may go far for free
+});
+
+test("a wider search finds collectors who go that far, with their charge", () => {
+  const home = { lat: 19.1, lng: 72.85 };
+  const c = (name, lat, max_km, fee_per_km) => ({ id: name, name, lat, lng: 72.85, accepted_types: ["PET"], capacity_kg: 50, max_km, fee_per_km });
+  // about 8.9 km and 13.3 km north of home
+  const people = [c("goes 10 km", 19.18, 10, 5), c("stays local", 19.18, 5, 0), c("goes 25 km", 19.22, 25, 4)];
+  assert.deepEqual(topMatches(people, ["PET"], 5, home, 5, true), []);
+  const ten = topMatches(people, ["PET"], 5, home, 10, true);
+  assert.deepEqual(ten.map((m) => m.name), ["goes 10 km"]); // "stays local" won't go 8.9 km
+  assert.equal(ten[0].fee, pickupFee(ten[0].km, 5));
+  assert.deepEqual(topMatches(people, ["PET"], 5, home, 15, true).map((m) => m.name), ["goes 10 km", "goes 25 km"]);
+  // recyclers (no own reach) are matched on the search distance only
+  assert.equal(topMatches(people, ["PET"], 5, home, 15).length, 3);
+});
+
+test("only the collector's free slots are offered", () => {
+  const monday8am = new Date(2026, 10, 16, 8, 0); // 16 Nov 2026 is a Monday
+  const all = openSlots([], monday8am);
+  assert.equal(all[0].start.getHours(), 9);
+  const free = [slotKey(1, 16), slotKey(3, 9)]; // Monday 4 PM, Wednesday 9 AM
+  const mine = openSlots([], monday8am, free);
+  assert.deepEqual(mine.map((s) => [s.start.getDay(), s.start.getHours()]), [[1, 16], [3, 9]]);
+  assert.equal(openSlots([], monday8am, []).length, all.length); // nothing set = every slot
+  assert.equal(hoursLabel(9), "9 AM–11 AM");
+  assert.equal(hoursLabel(16, "mr"), "संध्याकाळी 4–6");
 });

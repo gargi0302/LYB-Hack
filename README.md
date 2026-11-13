@@ -15,9 +15,9 @@ All data is fictional. Plant X, every society, collector, recycler, area and add
 | Problem statement asks for | Where it is |
 |---|---|
 | Separate logins for generators, collectors, recyclers | 4 roles (User, Collector, Recycler, Plant X), one demo login each. The database rules decide what each role sees. |
-| Photo → plastic type with a confidence score | `/user/new` ("Feed Basellion"): our own model, running in the browser |
-| Match listing to collector/recycler by type, quantity, location | Collectors within 5 km that take the plastic and have room, nearest first, with the reason, e.g. "Accepts PET · 0.5 km · capacity 80 kg" |
-| Schedule pickups, track every status | The user picks a 2-hour slot and the collector confirms or declines it. Parcel-style tracker: Listed → Pickup requested → Pickup confirmed → Collector on the way → Picked up → At the recycler → Recycled. Every step goes into an append-only log. |
+| Photo → plastic type with a confidence score | `/user/new` ("Feed Basellion"): households list one mixed bag, and our own model, running in the browser, reads the type of anything they can't name ("Scan it") |
+| Match listing to collector/recycler by type, quantity, location | Collectors within 5 km that take the plastic and have room, nearest first, with the reason, e.g. "Accepts PET · 0.5 km · capacity 80 kg". If nobody suits, the user can search up to 10, 15 or 25 km; only collectors who go that far are shown, each with their pickup charge |
+| Schedule pickups, track every status | The user picks one of the collector's free 2-hour slots and the collector confirms or declines it. Parcel-style tracker: Listed → Pickup requested → Pickup confirmed → Collector on the way → Picked up → At the recycler → Recycled. Every step goes into an append-only log. |
 | Impact dashboard: kg by type and area, CO₂ avoided | `/dashboard`. A headline strip shows CO₂ avoided and plastic recycled, per day and so far, "as on" today's date with Indian digit grouping. It follows the style of government impact counters such as the [PM E-DRIVE dashboard](https://pmedrive.heavyindustries.gov.in/dashboard-home) ("CO2 Reduction per day (In Kg.)", data as per Vahan). The formula and assumptions are shown below the strip, and each user sees their own CO₂ avoided on their home screen. |
 | Bonus: points for generators | 10 coins per kg, given in full at pickup, plus a society leaderboard |
 | Bonus: QR label per batch | QR on every batch → public history page with no names |
@@ -25,15 +25,17 @@ All data is fictional. Plant X, every society, collector, recycler, area and add
 Extras:
 - Every screen in English, हिंदी and मराठी, switched from the header (EN · हिं · मरा) and remembered on the device. Dates and pickup slots read naturally in each language ("सुबह 9–11 बजे", "सकाळी 9–11"), Basellion's chat answers in the chosen language, and name hints understand words like थैली, पिशवी, बोतल, डबा. The translations are ours; a native speaker should review them.
 - Sign-up in four short steps (no scrolling on any screen): account type, personal details, address and location, then email and password. Account types: User (name, phone, age, gender, first pickup address), Collector or Recycler (name, work area, plastics taken, capacity) or Plant X. Addresses start from a 6-digit PIN code: the areas, city and state fill in automatically (India Post's public PIN API) and the map point for the 5 km search comes from OpenStreetMap. One email has exactly one account type, fixed at sign-up. Sign-in has Remember me, show password and Forgot password (an email link to `/reset`). Users also get a Profile page to edit details and keep several pickup addresses. You choose the address for each pickup, and the 5 km collector search starts from it.
-- 1 to 3 photos per listing, from the in-app camera or the device. Items are found automatically, boxed and numbered 1, 2, 3 from left to right, and each one is classified on its own crop:
-  1. items laid out on a plain floor or sheet are found by comparing them with the background (`lib/objects.ts`);
-  2. on a busy background, a ready-made object detector (COCO-SSD, `lib/detect.ts`) finds everyday objects such as bottles, cups and bowls, and skips people, hands, tables, chairs and other background;
-  3. otherwise the whole photo is one item. If only a hand or person was found, the app suggests putting the item down on a plain surface.
-- When the AI can't identify an item (below 60%), a "What is it?" box appears next to its number, followed by a category picker. Typing a name suggests the usual plastic ("Dark Fantasy wrapper" or "black tiffin" → PP, "milk pouch" → LDPE). Every item also has "Not right? Tell us what it is" for when the AI is confidently wrong.
-- **Ask Basellion** (optional): describe the waste in words, e.g. "a whole packet of Dark Fantasy cookies". A language model (OpenAI) lists the pieces with type, count and approximate grams, e.g. 1 outer pack, 1 tray and 6 cookie wrappers, all PP, marked "typical, check the pack". One tap adds them as numbered items the user can still edit, and the grams give a weight estimate.
+- **Feed Basellion is one bag, not one item at a time**, because households throw everything mixed into one bag. Three short steps, each on its own screen, with the Back/Next/Send bar always above the thumb:
+  1. **Your bag**: one photo of the bag (proof; it stays on the phone and only its fingerprint is saved, so the same photo can't be listed twice) and its size, Small / Medium / Large and Half / Full. That gives a rough weight range, e.g. a full large bag holds about 1–2.5 kg of plastic. The app does not try to measure volume from the photo.
+  2. **What's inside**: tap common household items (water or cold-drink bottle, oil bottle, milk pouch, carry bag, chips or biscuit wrapper, takeaway container, shampoo or detergent bottle, bucket or mug), each with its usual plastic type, and count them with − and +. "Something else" takes any name and suggests the type from it ("curd cup" → PP); with no hint it is "not sure" and gets checked at pickup. A live line sums it up: "14 PP · 5 PET · 2 LDPE · 1 not sure · about 0.2 kg". The catalogue, typical grams and bag ranges are in one place, `lib/plastics.ts` (placeholder numbers).
+  3. **Check and send**: the list's weight is compared with the bag. If the list is far lighter (under half the bag's smallest weight) Basellion asks "Did you miss some items?"; if it is far heavier (over twice the largest), "Is the bag bigger?". The user can still send it, and the batch is marked "check at pickup". Then the address, and the same collector matching and slot booking as before.
+- **"Not sure what something is? Scan it"**: the photo AI is the helper inside step 2. Photograph one item, or tip the bag out, lay everything apart on the floor and photograph it all at once. Items laid apart on a plain floor are split by comparing with the background (`lib/objects.ts`); on a busy background a ready-made detector (COCO-SSD, `lib/detect.ts`) finds objects and skips people, hands and furniture. Each scanned item joins the list with the AI's type and confidence; below 60% it is "not sure". A scanned item the AI calls not recyclable stays out of the bag.
+- Every listed item is saved in `batch_items` with its name, count and type ("not sure" items as UNCLEAR, which collector matching ignores), so the collector sees the whole list, e.g. "5 × PET (Water or cold-drink bottle) · 12 × PP (Chips or biscuit wrapper) · not sure (broken toy)". The listing's type is the plastic with the most pieces, and its weight is the list's estimate (the recycler weighs it later).
+- **Ask Basellion** (optional, in step 2): describe the waste in words, e.g. "a whole packet of Dark Fantasy cookies". A language model (OpenAI) lists the pieces with type, count and approximate grams, e.g. 1 outer pack, 1 tray and 6 cookie wrappers, all PP, marked "typical, check the pack". One tap adds them to the bag's list, where the user can still change them.
 - Clear category descriptions and a "How to tell the plastics apart" guide: the printed code always wins; crinkly film that springs back is usually PP, soft stretchy film is usually LDPE.
-- One pickup can hold several plastics (e.g. PET + PP); only collectors who take all of them are offered. Each numbered item is saved with its name, the AI's guess and the chosen type.
-- **Send for recycling** sits under Basellion, with a line saying what is still missing.
+- One pickup can hold several plastics (e.g. PET + PP); only collectors who take all of them are offered.
+- **Collectors set their own availability** (Availability tab): the weekly slots they are free (Monday to Sunday × 9 AM, 12 PM, 4 PM), how far they go (5, 10, 15 or 25 km) and a charge per km beyond 5 km. Pickups up to 5 km are always free for the user; further away the user sees the charge before choosing, e.g. "Pickup charge ₹11, paid in cash at pickup", and both sides see it on the batch. The database works out the charge from the distance when the collector is chosen and refuses a collector who is further than they go, so neither can be changed from the app (`supabase/migrations/20261114000000_collector_reach.sql`).
+- The step bar always says what is still missing ("Add a photo of the bag", "Tap at least one item in the bag").
 - Basellion the monster: happy when fed in the last 7 days, hungry after 7, a grey wilting monster with a dead twig after 14. It eats recyclable plastic and spits out the rest. Tap it to preview its moods. It also grows with what it was fed this month: stage 1 under 50 kg (smallest, least happy), stage 2 from 50 kg, stage 3 from 500 kg (biggest, happiest), and every listing it eats makes it a little bigger and a little happier (`lib/growth.ts`).
 - Sorting tips for each plastic type
 - A "check at pickup" flag when the AI is unsure
@@ -123,11 +125,12 @@ Type one of these into the sign-in form. Each account lands on the home of its o
 1. **User** (1 min 30 s):
    - Home shows only Basellion, the coins, the stats and the Feed button. Pickups and history are in the **My waste** tab. Tap Basellion twice to show "hungry" and the wilting "sad" monster, then once more to bring back the happy one.
    - Before the demo, copy the 4 photos in `public/samples/` to the demo phone or laptop.
-   - **Feed Basellion** → **Upload from device** → `sample-4.png` (a glass bottle): Basellion spits it out, "not plastic". Remove it.
-   - Upload `sample-1.png` (crushed PET bottles): item 1, "PET · 100%", sorting tips. Or photograph a few real items laid out on a plain sheet to show the numbered boxes. If an item says "The AI can't identify this one", type what it is (e.g. "biscuit wrapper") and tap **Use PP**. Enter the weight, pick the **Home** address, then **Send for recycling** under Basellion, and Basellion eats it.
-   - Collectors within 5 km appear with the reason line. Pick "Asha Scrap Collectors", then a time slot. The app opens **My waste**, where the tracker says "Waiting for Asha Scrap Collectors to confirm".
-   - Optional: `sample-2.png` (HDPE bottles) and `sample-3.png` (PP tubs). **Create an account** on the sign-in page shows the sign-up, and the **Profile** tab shows saved addresses.
-2. **Collector** (1 min): the dashboard shows this month's numbers and the requests. The address is hidden until **Confirm slot**, then it appears on the **Pickups** tab. Tap **Leaving now**.
+   - **Feed Basellion**, step 1: **Upload from device** → any photo of a bag, then **Large** and **Full** ("about 1–2.5 kg of plastic") → **Next**.
+   - Step 2: tap **Water or cold-drink bottle** 5 times, **Chips or biscuit wrapper** 12 times, **Milk pouch** twice. Type "curd cup" in **Something else** (it becomes PP). Under **Not sure what something is? Scan it**, upload `sample-1.png`: it joins the list as "AI: PET · 100%". Upload `sample-4.png` (a glass bottle): Basellion spits it out and it stays out of the bag. The bar reads "… · about 0.2 kg" → **Next**.
+   - Step 3: the list (about 0.2 kg) is far lighter than a full large bag, so Basellion asks "Did you miss some items?". Tap **Add more items** to show the way back, or send it as it is (it gets "check at pickup"). Pick **Home**, then **Send for recycling**, and Basellion eats it.
+   - Collectors within 5 km appear with the reason line and "Free pickup". Tap **Up to 10 km** to show GreenCart Pickups (6.4 km) with its pickup charge, if GreenCart has set a rate on its Availability tab. Pick "Asha Scrap Collectors", then a time slot. The app opens **My waste**, where the tracker says "Waiting for Asha Scrap Collectors to confirm".
+   - Optional: **Ask Basellion** in step 2 ("a packet of Dark Fantasy cookies"). **Create an account** on the sign-in page shows the sign-up, and the **Profile** tab shows saved addresses.
+2. **Collector** (1 min): the dashboard shows this month's numbers and the requests, each with the bag's item list. The address is hidden until **Confirm slot**, then it appears on the **Pickups** tab. Tap **Leaving now**.
    - Back on the user's phone (or a second browser), **My waste** shows "Collector on the way".
    - **Mark picked up**: the user sees "Pickup complete! +60 coins" and the coin balance goes up.
    - **Delivered to** "Circle Polymers Recycling".
@@ -299,10 +302,10 @@ Safeguards: several corrections vote, so one wrong or mischievous one can't over
 ## Tests
 
 ```bash
-npm test     # 26 checks. The rule tests need the local database running.
+npm test     # 35 checks. The rule tests need the local database running.
 ```
 
-- `tests/logic.test.mjs`: distance, matching order, reasons and the 5 km limit, confidence bands, name hints ("Dark Fantasy wrapper" → PP), value estimate, time slots, Basellion's growth stages and "fed this month", recalling corrections (the 0.75 line, voting, ties) and the held-item search parts
+- `tests/logic.test.mjs`: distance, matching order, reasons and the 5 km limit, confidence bands, name hints ("Dark Fantasy wrapper" → PP), value estimate, time slots, Basellion's growth stages and "fed this month", recalling corrections (the 0.75 line, voting, ties) and the held-item search parts, the bag catalogue, list weight and the bag cross-check
 - `tests/rules.test.mjs`: logs in as each role and checks:
   - users see only their own batches
   - a collector can turn down a slot
@@ -317,6 +320,7 @@ npm test     # 26 checks. The rule tests need the local database running.
   - a listing's items follow its privacy (others can't add or read them)
   - the reset works
   - corrections: everyone reads embeddings, nobody reads another person's photo or id, the AI's own answer without a name is refused
+  - collectors set their reach and rate; the pickup charge is worked out by the database, the user can't lower it, and a collector further than they go is refused
 
 ## Next steps
 

@@ -10,7 +10,7 @@ export function ItemsLine({ batch }: { batch: Batch }) {
   const { t } = useLang();
   if (!batch.batch_items?.length) return null;
   const list = [...batch.batch_items].sort((a, b) => a.position - b.position)
-    .map((i) => `${i.position}. ${i.count > 1 ? `${i.count} × ` : ""}${i.type}${i.name ? ` (${i.name})` : ""}`);
+    .map((i) => `${i.position}. ${i.count > 1 ? `${i.count} × ` : ""}${i.type === "UNCLEAR" ? t("items.unsureShort") : i.type}${i.name ? ` (${i.name})` : ""}`);
   return <p className="mt-2 text-sm text-stone-600">{t("items")}: {list.join(" · ")}</p>;
 }
 
@@ -54,6 +54,7 @@ export default function BatchCard({ batch, children }: { batch: Batch; children?
           </li>
         )}
         {batch.weight_flag && <li className="font-medium text-red-700">{t("card.flag")}</li>}
+        {Number(batch.pickup_fee) > 0 && <li className="font-medium text-brand-900">{t("card.fee", { fee: batch.pickup_fee!, km: batch.distance_km ?? "" })}</li>}
       </ul>
 
       {children}

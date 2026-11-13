@@ -18,6 +18,9 @@ export type Profile = {
   lat: number;
   lng: number;
   accepted_types: Plastic[];
+  max_km?: number; // collectors: how far they go for a pickup
+  fee_per_km?: number; // collectors: ₹ per km beyond 5 km
+  free_slots?: string[] | null; // collectors: weekly free slots, "weekday-hour"; empty = all
   capacity_kg: number;
   language: string;
   age: number | null;
@@ -41,6 +44,8 @@ export type Batch = {
   lat: number;
   lng: number;
   ai_type: Plastic | null;
+  distance_km?: number | null; // to the collector, set when one is chosen
+  pickup_fee?: number; // ₹ the user pays the collector in cash; 0 within 5 km
   ai_confidence: number | null;
   final_type: Plastic;
   verify_at_pickup: boolean;
@@ -60,7 +65,12 @@ export type Batch = {
 };
 
 // the different plastics in a listing (older listings have no items, just the one type)
-export const typesOf = (b: Batch) => (b.batch_items?.length ? [...new Set(b.batch_items.map((i) => i.type))] : [b.final_type]);
+// the plastics in a batch; items saved as UNCLEAR are "not sure, checked at pickup" and don't count
+// (a collector is matched on the plastics they take, and nobody "takes" UNCLEAR)
+export function typesOf(b: Batch): Plastic[] {
+  const types = [...new Set((b.batch_items ?? []).map((i) => i.type).filter((t) => t !== "UNCLEAR"))];
+  return types.length ? types : [b.final_type];
+}
 
 // The database calls households and businesses "generator"; on screen they are "User" (role.generator in lib/i18n.ts)
 
