@@ -142,8 +142,8 @@ test("items of a listing follow the listing's privacy", async () => {
   assert.equal((await collector.db.from("batch_items").select("id").eq("batch_id", mine.id)).data.length, 0);
 });
 
-test("demo reset puts the demo data back", async () => {
-  const { db } = await login("user");
+test("demo reset puts the demo data back (Plant X only)", async () => {
+  const { db } = await login("plantx");
   assert.ifError((await db.rpc("reset_demo")).error);
 });
 
@@ -187,4 +187,21 @@ test("collectors set their reach and rate; the database works out the pickup cha
   await col.from("profiles").update({ max_km: 5, fee_per_km: 0, free_slots: null }).eq("id", colId);
   const { data: second } = await db.from("batches").insert({ area: "Test area", lat, lng: me.lng, final_type: "PET", declared_kg: 1, last_note: "reach test" }).select("id").single();
   assert.ok((await db.from("batches").update({ status: "matched", collector_id: colId, scheduled_at: new Date(Date.now() + 86400000).toISOString() }).eq("id", second.id)).error);
+});
+
+test("only Plant X can reset the demo data", async () => {
+  for (const who of ["user", "collector", "recycler"]) {
+    const { db } = await login(who);
+    const { error } = await db.rpc("reset_demo");
+    assert.match(error?.message ?? "", /Only Plant X/, `${who} must not reset`);
+  }
+  const anon = createClient(url, key, { auth: { persistSession: false } });
+  assert.ok((await anon.rpc("reset_demo")).error);
+});
+
+test("weak passwords are refused at sign-up", async () => {
+  const db = createClient(url, key, { auth: { persistSession: false } });
+  const email = `weak${Date.now()}@test.local`;
+  assert.equal((await db.auth.signUp({ email, password: "123456" })).error?.code, "weak_password"); // too short
+  assert.equal((await db.auth.signUp({ email, password: "onlyletters" })).error?.code, "weak_password"); // no numbers
 });

@@ -84,6 +84,10 @@ declare
   t plastic; found_type plastic; st batch_status;
   created timestamptz; coll uuid; rec uuid; b uuid;
 begin
+  -- it deletes every batch: only Plant X may run it from the app (the seed itself runs with no login)
+  if auth.uid() is not null and my_role() is distinct from 'plantx' then
+    raise exception 'Only Plant X can reset the demo data';
+  end if;
   perform set_config('app.seeding', 'on', true);  -- trigger stays quiet, we write the history ourselves
   perform setseed(0.42);                           -- same "random" data after every reset
   delete from batches where true;                  -- also clears events and addresses (cascade).

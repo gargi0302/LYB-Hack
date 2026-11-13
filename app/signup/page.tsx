@@ -65,6 +65,7 @@ export default function SignUp() {
     // 1. the login itself (an email that already has an account is refused)
     const { data, error } = await supabase.auth.signUp({ email: String(form.get("email")), password: String(form.get("password")) });
     if (error?.code === "user_already_exists" || (data.user && !data.user.identities?.length)) return fail(t("signup.exists"));
+    if (error?.code === "weak_password") return fail(t("signup.weak"), 3);
     if (error || !data.user) return fail(error?.message ?? t("signup.failed"));
 
     // 2. the profile with the chosen role, placed at that address or area
@@ -154,7 +155,7 @@ export default function SignUp() {
             <input name="email" type="email" required className="field-input" autoComplete="email" />
           </Field>
           <Field label={<>{t("login.password")} <span className="font-normal">{t("signup.min")}</span></>} className="pr-11">
-            <input name="password" type={showPassword ? "text" : "password"} required minLength={6} className="field-input" autoComplete="new-password" />
+            <input name="password" type={showPassword ? "text" : "password"} required minLength={8} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" title={t("signup.weak")} className="field-input" autoComplete="new-password" />
             <button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? t("login.hide") : t("login.show")}
               className="absolute top-1/2 right-1.5 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full text-stone-500 hover:text-brand-950">
               {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}

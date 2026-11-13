@@ -30,7 +30,7 @@ export default function ResetPassword() {
     setError("");
     const { data, error } = await supabase.auth.updateUser({ password });
     if (error) {
-      setError(error.message);
+      setError(error.code === "weak_password" ? t("signup.weak") : error.message);
       setBusy(false);
       return;
     }
@@ -50,7 +50,7 @@ export default function ResetPassword() {
         <form onSubmit={save} className="flex flex-1 flex-col gap-3">
           <div className="field pr-11">
             <label htmlFor="password" className="field-label">{t("reset.new")} <span className="font-normal">{t("signup.min")}</span></label>
-            <input id="password" type={show ? "text" : "password"} required minLength={6} value={password} onChange={(e) => setPassword(e.target.value)}
+            <input id="password" type={show ? "text" : "password"} required minLength={8} pattern="(?=.*[A-Za-z])(?=.*[0-9]).{8,}" title={t("signup.weak")} value={password} onChange={(e) => setPassword(e.target.value)}
               className="field-input" autoComplete="new-password" />
             <button type="button" onClick={() => setShow(!show)} aria-label={show ? t("login.hide") : t("login.show")}
               className="absolute top-1/2 right-1.5 grid h-9 w-9 -translate-y-1/2 place-items-center rounded-full text-stone-500 hover:text-brand-950">
