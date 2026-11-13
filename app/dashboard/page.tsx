@@ -48,14 +48,15 @@ export default function ImpactDashboard() {
       });
       return;
     }
+    // Plant X: totals for its own city only (database functions; Plant X can't read single batches)
     Promise.all([
-      supabase.from("impact_weekly").select("*").order("week"),
+      supabase.rpc("city_impact"),
       supabase.from("emission_factors").select("*"),
-      supabase.from("sorting_quality").select("*").order("match_pct"),
-      supabase.from("leaderboard").select("id, name, area, coins").order("coins", { ascending: false }).limit(5),
-      supabase.from("model_corrections").select("id", { count: "exact", head: true }),
+      supabase.rpc("city_quality"),
+      supabase.rpc("city_leaderboard"),
+      supabase.rpc("city_corrections"),
     ]).then(([i, f, q, l, c]) => setData({
-      impact: i.data ?? [], factors: f.data ?? [], quality: q.data ?? [], leaders: l.data ?? [], corrections: c.count ?? 0,
+      impact: i.data ?? [], factors: f.data ?? [], quality: q.data ?? [], leaders: l.data ?? [], corrections: Number(c.data ?? 0),
       asOf: Date.now(), // shown as "As on 12-11-2026"
       own: false,
     }));
@@ -115,7 +116,10 @@ export default function ImpactDashboard() {
         </dl>
         <p className="px-4 py-3 text-xs text-stone-500 sm:px-5">{t("dash.footnote")}</p>
       </section>
-      <p className="mt-3 text-sm font-medium text-brand-800">{t(`dash.scope.${profile!.role}` as Key)}</p>
+      <p className="mt-3 text-sm font-medium text-brand-800">
+        {profile!.role !== "plantx" ? t(`dash.scope.${profile!.role}` as Key)
+          : profile!.city ? t("dash.scope.plantxCity", { city: profile!.city }) : t("dash.scope.plantxNear", { area: profile!.area })}
+      </p>
 
       {nothingYet && (
         <section className="card mt-4 text-center">

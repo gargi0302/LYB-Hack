@@ -228,6 +228,7 @@ export default function FeedBasellion() {
     const [{ data, error }] = await Promise.all([
       supabase.from("batches").insert({
         area: address.area,
+        city: address.city ?? null, // Plant X sees the listings of its own city
         lat: Math.round(address.lat * 1000) / 1000, // ~100 m, the exact spot is in the address
         lng: Math.round(address.lng * 1000) / 1000,
         ai_type: aiMain,

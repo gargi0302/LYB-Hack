@@ -205,3 +205,23 @@ test("weak passwords are refused at sign-up", async () => {
   assert.equal((await db.auth.signUp({ email, password: "123456" })).error?.code, "weak_password"); // too short
   assert.equal((await db.auth.signUp({ email, password: "onlyletters" })).error?.code, "weak_password"); // no numbers
 });
+
+test("Plant X sees totals for its own city only, nobody else gets them", async () => {
+  const { db: plant } = await login("plantx");
+  const { data: rows, error } = await plant.rpc("city_impact");
+  assert.ifError(error);
+  assert.ok(rows.length > 0 && rows.every((r) => r.kg > 0));
+  assert.ok((await plant.rpc("city_leaderboard")).data.length > 0);
+  for (const who of ["user", "collector", "recycler"]) {
+    const { db } = await login(who);
+    assert.deepEqual((await db.rpc("city_impact")).data, []);
+    assert.equal(Number((await db.rpc("city_corrections")).data), 0);
+  }
+  // the city rule: names match when both are known, otherwise within 25 km
+  const inCity = async (b_city, b_lat, b_lng, p_city, p_lat = 19.04, p_lng = 72.87) =>
+    (await plant.rpc("in_city", { b_city, b_lat, b_lng, p_city, p_lat, p_lng })).data;
+  assert.equal(await inCity("mumbai ", 0, 0, "Mumbai"), true); // names win, even with a far-off point
+  assert.equal(await inCity("Pune", 19.05, 72.87, "Mumbai"), false);
+  assert.equal(await inCity(null, 19.17, 72.96, "Mumbai"), true); // no city on the batch: ~17 km away
+  assert.equal(await inCity(null, 18.52, 73.86, null), false); // Pune is ~120 km away
+});

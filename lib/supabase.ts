@@ -18,6 +18,7 @@ export type Profile = {
   lat: number;
   lng: number;
   accepted_types: Plastic[];
+  city?: string | null; // from the PIN code at sign-up; null on the demo profiles
   max_km?: number; // collectors: how far they go for a pickup
   fee_per_km?: number; // collectors: ₹ per km beyond 5 km
   free_slots?: string[] | null; // collectors: weekly free slots, "weekday-hour"; empty = all
